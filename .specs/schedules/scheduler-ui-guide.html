@@ -1,0 +1,855 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PostReels Scheduler - UI/UX Guide</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #E11D48;
+            --primary-hover: #DC2626;
+            --accent: #2563EB;
+            --success: #10B981;
+            --warning: #F59E0B;
+            --destructive: #DC2626;
+            --bg: #FFFFFF;
+            --bg-secondary: #F9FAFB;
+            --text: #1F2937;
+            --text-secondary: #6B7280;
+            --border: #E5E7EB;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg: #111827;
+                --bg-secondary: #1F2937;
+                --text: #F9FAFB;
+                --text-secondary: #D1D5DB;
+                --border: #4B5563;
+            }
+        }
+
+        body {
+            font-family: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.5;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 48px;
+            padding: 32px 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        h1 {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .subtitle {
+            color: var(--text-secondary);
+            font-size: 16px;
+        }
+
+        .section {
+            margin-bottom: 48px;
+        }
+
+        .section-title {
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 24px;
+            padding-bottom: 12px;
+            border-bottom: 2px solid var(--primary);
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 24px;
+            margin-bottom: 24px;
+        }
+
+        .card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 20px;
+            transition: all 150ms ease-out;
+        }
+
+        .card:hover {
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            border-color: var(--primary);
+        }
+
+        .card-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 12px;
+        }
+
+        .card-description {
+            font-size: 14px;
+            color: var(--text-secondary);
+            line-height: 1.6;
+        }
+
+        .wireframe {
+            background: white;
+            border: 2px dashed var(--border);
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            font-family: "Courier New", monospace;
+            font-size: 12px;
+            overflow-x: auto;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            .wireframe {
+                background: #1F2937;
+                border-color: #4B5563;
+            }
+        }
+
+        .wireframe-title {
+            font-weight: 600;
+            margin-bottom: 12px;
+            color: var(--primary);
+        }
+
+        .component-showcase {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 24px;
+            margin-bottom: 24px;
+        }
+
+        .button-demo {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .btn {
+            padding: 10px 16px;
+            border-radius: 6px;
+            border: none;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 150ms ease-out;
+            font-family: inherit;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--primary-hover);
+            transform: translateY(-1px);
+        }
+
+        .btn-secondary {
+            background: transparent;
+            border: 2px solid var(--border);
+            color: var(--text);
+        }
+
+        .btn-secondary:hover {
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 16px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .badge-default {
+            background: #E11D48;
+            color: white;
+        }
+
+        .badge-success {
+            background: #D1FAE5;
+            color: #065F46;
+        }
+
+        .badge-warning {
+            background: #FEF3C7;
+            color: #92400E;
+        }
+
+        .badge-outline {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+        }
+
+        .input-demo {
+            margin-bottom: 16px;
+        }
+
+        .input-demo label {
+            display: block;
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 6px;
+        }
+
+        .input-demo input,
+        .input-demo textarea {
+            width: 100%;
+            padding: 10px 12px;
+            border: 2px solid var(--border);
+            border-radius: 6px;
+            font-family: inherit;
+            font-size: 14px;
+            background: var(--bg);
+            color: var(--text);
+        }
+
+        .input-demo input:focus,
+        .input-demo textarea:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(225, 29, 72, 0.1);
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .checkbox-group {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .checkbox-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+        }
+
+        .checkbox-item input {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+
+        .flow-diagram {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .flow-step {
+            display: flex;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .flow-number {
+            background: var(--primary);
+            color: white;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            margin-right: 12px;
+            flex-shrink: 0;
+        }
+
+        .flow-text {
+            font-size: 14px;
+        }
+
+        .arrow {
+            text-align: center;
+            color: var(--primary);
+            font-size: 18px;
+            margin: 8px 0;
+        }
+
+        .checklist {
+            background: var(--bg-secondary);
+            border-left: 4px solid var(--success);
+            border-radius: 6px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+
+        .checklist-title {
+            font-weight: 600;
+            margin-bottom: 12px;
+            color: var(--success);
+        }
+
+        .checklist-items {
+            list-style: none;
+            font-size: 14px;
+        }
+
+        .checklist-items li {
+            padding: 6px 0;
+        }
+
+        .checklist-items li:before {
+            content: "✓ ";
+            color: var(--success);
+            font-weight: 600;
+            margin-right: 8px;
+        }
+
+        .color-palette {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 16px;
+        }
+
+        .color-swatch {
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .color-box {
+            height: 80px;
+        }
+
+        .color-label {
+            padding: 8px;
+            background: var(--bg-secondary);
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .tag-demo {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            padding: 12px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            margin-bottom: 12px;
+        }
+
+        .tag {
+            background: var(--primary);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .tag button {
+            background: none;
+            border: none;
+            color: white;
+            cursor: pointer;
+            font-size: 12px;
+            padding: 0;
+            margin-left: 4px;
+        }
+
+        .footer {
+            text-align: center;
+            padding: 32px 0;
+            border-top: 1px solid var(--border);
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        .tab-nav {
+            display: flex;
+            gap: 0;
+            margin-bottom: 20px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .tab-item {
+            padding: 12px 16px;
+            border: none;
+            background: none;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            border-bottom: 3px solid transparent;
+            transition: all 150ms ease-out;
+        }
+
+        .tab-item:hover {
+            color: var(--text);
+        }
+
+        .tab-item.active {
+            color: var(--primary);
+            border-bottom-color: var(--primary);
+        }
+
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 24px;
+            }
+
+            .section-title {
+                font-size: 18px;
+            }
+
+            .grid-2 {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎥 PostReels Video Scheduler</h1>
+            <p class="subtitle">UI/UX Design System & Component Guide</p>
+        </header>
+
+        <!-- Color Palette -->
+        <section class="section">
+            <h2 class="section-title">📎 Paleta de Cores</h2>
+            <div class="color-palette">
+                <div class="color-swatch">
+                    <div class="color-box" style="background: #E11D48;"></div>
+                    <div class="color-label">Primária<br>#E11D48</div>
+                </div>
+                <div class="color-swatch">
+                    <div class="color-box" style="background: #2563EB;"></div>
+                    <div class="color-label">Accent<br>#2563EB</div>
+                </div>
+                <div class="color-swatch">
+                    <div class="color-box" style="background: #10B981;"></div>
+                    <div class="color-label">Success<br>#10B981</div>
+                </div>
+                <div class="color-swatch">
+                    <div class="color-box" style="background: #F59E0B;"></div>
+                    <div class="color-label">Warning<br>#F59E0B</div>
+                </div>
+                <div class="color-swatch">
+                    <div class="color-box" style="background: #DC2626;"></div>
+                    <div class="color-label">Destructive<br>#DC2626</div>
+                </div>
+                <div class="color-swatch">
+                    <div class="color-box" style="background: #6B7280;"></div>
+                    <div class="color-label">Text Secondary<br>#6B7280</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Components -->
+        <section class="section">
+            <h2 class="section-title">🎨 Componentes Base</h2>
+
+            <h3 style="font-size: 18px; margin: 24px 0 12px; font-weight: 600;">Botões</h3>
+            <div class="button-demo">
+                <button class="btn btn-primary">Agendar Publicação</button>
+                <button class="btn btn-primary" style="background: #F43F5E;">Primary Hover</button>
+                <button class="btn btn-secondary">Cancelar</button>
+                <button class="btn btn-secondary" style="opacity: 0.5; cursor: not-allowed;">Desabilitado</button>
+            </div>
+
+            <h3 style="font-size: 18px; margin: 24px 0 12px; font-weight: 600;">Badges</h3>
+            <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                <span class="badge badge-default">⏰ Agendado</span>
+                <span class="badge badge-success">✅ Publicado</span>
+                <span class="badge badge-warning">⚠️ Aviso</span>
+                <span class="badge badge-outline">📝 Rascunho</span>
+            </div>
+
+            <h3 style="font-size: 18px; margin: 24px 0 12px; font-weight: 600;">Inputs & Forms</h3>
+            <div class="component-showcase">
+                <div class="input-demo">
+                    <label>Email (com focus)</label>
+                    <input type="email" placeholder="seu@email.com" style="border-color: var(--primary); box-shadow: 0 0 0 3px rgba(225, 29, 72, 0.1);">
+                </div>
+                <div class="input-demo">
+                    <label>Descrição (Textarea)</label>
+                    <textarea rows="3" placeholder="Conte uma história interessante..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Plataformas</label>
+                    <div class="checkbox-group">
+                        <label class="checkbox-item">
+                            <input type="checkbox" checked>
+                            <span>🔵 Facebook</span>
+                        </label>
+                        <label class="checkbox-item">
+                            <input type="checkbox" checked>
+                            <span>📷 Instagram</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <h3 style="font-size: 18px; margin: 24px 0 12px; font-weight: 600;">Hashtags Input</h3>
+            <div class="component-showcase">
+                <div class="tag-demo">
+                    <span class="tag">#trending <button>×</button></span>
+                    <span class="tag">#viral <button>×</button></span>
+                    <span class="tag">#reels <button>×</button></span>
+                    <input type="text" placeholder="Adicionar hashtag..." style="flex: 1; border: none; background: none; min-width: 100px; outline: none; font-family: inherit;">
+                </div>
+            </div>
+        </section>
+
+        <!-- User Flows -->
+        <section class="section">
+            <h2 class="section-title">🔄 Fluxos de Usuário</h2>
+
+            <h3 style="font-size: 18px; margin: 24px 0 12px; font-weight: 600;">1. Conectar Conta Meta</h3>
+            <div class="flow-diagram">
+                <div class="flow-step">
+                    <div class="flow-number">1</div>
+                    <div class="flow-text">Usuário clica "Conectar Facebook/Instagram"</div>
+                </div>
+                <div class="arrow">↓</div>
+                <div class="flow-step">
+                    <div class="flow-number">2</div>
+                    <div class="flow-text">Redirecionado para OAuth dialog (Meta)</div>
+                </div>
+                <div class="arrow">↓</div>
+                <div class="flow-step">
+                    <div class="flow-number">3</div>
+                    <div class="flow-text">Usuário autoriza e retorna ao app</div>
+                </div>
+                <div class="arrow">↓</div>
+                <div class="flow-step">
+                    <div class="flow-number">4</div>
+                    <div class="flow-text">Badge "Conectado" aparece com nome da página</div>
+                </div>
+            </div>
+
+            <h3 style="font-size: 18px; margin: 24px 0 12px; font-weight: 600;">2. Agendar Publicação</h3>
+            <div class="flow-diagram">
+                <div class="flow-step">
+                    <div class="flow-number">1</div>
+                    <div class="flow-text">Abrir vídeo → Clique "Publicar nas redes"</div>
+                </div>
+                <div class="arrow">↓</div>
+                <div class="flow-step">
+                    <div class="flow-number">2</div>
+                    <div class="flow-text">Modal/página com formulário de agendamento</div>
+                </div>
+                <div class="arrow">↓</div>
+                <div class="flow-step">
+                    <div class="flow-number">3</div>
+                    <div class="flow-text">Preencher: descrição, hashtags, plataformas, data/hora</div>
+                </div>
+                <div class="arrow">↓</div>
+                <div class="flow-step">
+                    <div class="flow-number">4</div>
+                    <div class="flow-text">Clique "Agendar" → loading spinner + confirmação</div>
+                </div>
+                <div class="arrow">↓</div>
+                <div class="flow-step">
+                    <div class="flow-number">5</div>
+                    <div class="flow-text">Toast: "Agendado com sucesso para 15 ago, 14:30"</div>
+                </div>
+            </div>
+
+            <h3 style="font-size: 18px; margin: 24px 0 12px; font-weight: 600;">3. Reutilizar Template</h3>
+            <div class="flow-diagram">
+                <div class="flow-step">
+                    <div class="flow-number">1</div>
+                    <div class="flow-text">Preencher formulário com descrição + hashtags</div>
+                </div>
+                <div class="arrow">↓</div>
+                <div class="flow-step">
+                    <div class="flow-number">2</div>
+                    <div class="flow-text">Marcar: "Salvar como template"</div>
+                </div>
+                <div class="arrow">↓</div>
+                <div class="flow-step">
+                    <div class="flow-number">3</div>
+                    <div class="flow-text">Nomear template: "Dica de Fitness"</div>
+                </div>
+                <div class="arrow">↓</div>
+                <div class="flow-step">
+                    <div class="flow-number">4</div>
+                    <div class="flow-text">Próxima publicação → dropdown "Usar Template" → preenchimento automático</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Wireframes -->
+        <section class="section">
+            <h2 class="section-title">📐 Wireframes</h2>
+
+            <h3 style="font-size: 18px; margin: 24px 0 12px; font-weight: 600;">Página: Schedule Form (Desktop)</h3>
+            <div class="wireframe">
+                <div class="wireframe-title">┌─ Agendar Publicação ─────────────────────────────────┐</div>
+                <pre>│                                                      │
+│ Vídeo: [Thumb] "Treino 10 minutos"                │
+│                                                      │
+│ Meta Account:                                      │
+│ [Dropdown] Minha Página FB (mypageid)              │
+│                                                      │
+│ Plataformas:                                       │
+│ ☑ Facebook   ☑ Instagram                          │
+│                                                      │
+│ Descrição: [────────────────────────────────]      │
+│ Novo treino...  (120/300)                          │
+│                                                      │
+│ Hashtags: [#viral] [#reels] [           ]          │
+│                                                      │
+│ 💾 Usar Template Anterior ▼                        │
+│                                                      │
+│ Agendar para:                                      │
+│ [Date Picker] 15 ago 2026  [Time] 14:30            │
+│ ℹ️ Melhor horário: 20:00-22:00                     │
+│                                                      │
+│ ☐ Salvar como template para futuros vídeos        │
+│                                                      │
+│ [Cancelar]  [Agendar Publicação ⏳]                │
+│                                                      │
+└──────────────────────────────────────────────────────┘</pre>
+            </div>
+
+            <h3 style="font-size: 18px; margin: 24px 0 12px; font-weight: 600;">Página: Publications List</h3>
+            <div class="wireframe">
+                <div class="wireframe-title">┌─ Publicações Agendadas ──────────────────────────────┐</div>
+                <pre>│ [Filtros] Status: [All ▼] | Plataforma: [▼]           │
+│                                                      │
+│ ┌─ [Thumb] "Treino 10 min"        📅 15 ago 14:30 │
+│ │ 🔗 Facebook + Instagram  👁️ 5 chars  ⏰ Agendado │
+│ │ [Editar] [Remover] [Publicar agora]              │
+│ └───────────────────────────────────────────────────┘
+│                                                      │
+│ ┌─ [Thumb] "Dica de Skincare"     📅 14 ago 20:00 │
+│ │ 🔗 Facebook  👁️ 150 chars  ✅ Publicado         │
+│ │ 📊 2.5K views • 320 likes                         │
+│ │ [Ver no Facebook] [Ver no Instagram]             │
+│ └───────────────────────────────────────────────────┘
+│                                                      │
+└──────────────────────────────────────────────────────┘</pre>
+            </div>
+
+            <h3 style="font-size: 18px; margin: 24px 0 12px; font-weight: 600;">Mobile Responsiveness (375px)</h3>
+            <div class="wireframe">
+                <div class="wireframe-title">┌─ Mobile (375px) ───────┐</div>
+                <pre>│ Agendar Publicação      │
+│                        │
+│ [Dropdown Account]     │
+│                        │
+│ Plataformas:           │
+│ ☑ Facebook            │
+│ ☑ Instagram           │
+│                        │
+│ Descrição:             │
+│ [─────────────────]    │
+│ (120/300)              │
+│                        │
+│ Hashtags:              │
+│ [#viral] [#reels]      │
+│ [             ]        │
+│                        │
+│ Agendar para:          │
+│ [────────────────]     │
+│ [────────────────]     │
+│                        │
+│ [Agendar] [Cancelar]   │
+│                        │
+└────────────────────────┘</pre>
+            </div>
+        </section>
+
+        <!-- Accessibility -->
+        <section class="section">
+            <h2 class="section-title">♿ Acessibilidade</h2>
+            <div class="checklist">
+                <div class="checklist-title">WCAG AAA Compliance Checklist</div>
+                <ul class="checklist-items">
+                    <li>Contraste de cores: 4.5:1 mínimo para textos primários</li>
+                    <li>Focus rings: Visíveis em todos elementos interativos</li>
+                    <li>Navegação por teclado: Tab order segue visual order</li>
+                    <li>ARIA labels: Buttons, inputs e regiões bem descritos</li>
+                    <li>Form labels: Todos inputs associados a labels (não placeholder-only)</li>
+                    <li>Error messages: Usando role="alert" e aria-invalid</li>
+                    <li>Dark mode: Testado independentemente em ambos temas</li>
+                    <li>Reduced motion: Respeita prefers-reduced-motion</li>
+                    <li>Touch targets: Mínimo 44×44px para elementos interativos</li>
+                    <li>Screen readers: Meaningful alt text e accessibility announcements</li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- Implementation -->
+        <section class="section">
+            <h2 class="section-title">🚀 Stack & Implementação</h2>
+            <div class="grid-2">
+                <div class="card">
+                    <div class="card-title">📦 Stack</div>
+                    <div class="card-description">
+                        <ul style="list-style: none;">
+                            <li>✓ React 18+</li>
+                            <li>✓ TypeScript</li>
+                            <li>✓ Tailwind CSS</li>
+                            <li>✓ shadcn/ui</li>
+                            <li>✓ react-hook-form</li>
+                            <li>✓ date-fns</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">🎨 Design Tokens</div>
+                    <div class="card-description">
+                        <ul style="list-style: none;">
+                            <li>✓ Font: Plus Jakarta Sans</li>
+                            <li>✓ Spacing: 8px grid</li>
+                            <li>✓ Border Radius: 6-8px</li>
+                            <li>✓ Animation: 150-300ms</li>
+                            <li>✓ Shadows: Minimal (flat design)</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">📱 Responsive</div>
+                    <div class="card-description">
+                        <ul style="list-style: none;">
+                            <li>✓ Mobile-first approach</li>
+                            <li>✓ 375px, 768px, 1024px breakpoints</li>
+                            <li>✓ No horizontal scroll</li>
+                            <li>✓ Touch-friendly spacing</li>
+                            <li>✓ Readable font sizes</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">🌙 Dark Mode</div>
+                    <div class="card-description">
+                        <ul style="list-style: none;">
+                            <li>✓ prefers-color-scheme support</li>
+                            <li>✓ CSS variables for tokens</li>
+                            <li>✓ Independent contrast testing</li>
+                            <li>✓ No color-only meaning</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Animation Spec -->
+        <section class="section">
+            <h2 class="section-title">✨ Animation Specifications</h2>
+            <div class="grid-2">
+                <div class="card">
+                    <div class="card-title">Micro-interactions</div>
+                    <div class="card-description">
+                        <strong>Duration:</strong> 150-200ms<br>
+                        <strong>Easing:</strong> ease-out<br>
+                        <strong>Examples:</strong><br>
+                        • Button hover/active states<br>
+                        • Input focus rings<br>
+                        • Card elevation on hover
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">State Transitions</div>
+                    <div class="card-description">
+                        <strong>Duration:</strong> 200-300ms<br>
+                        <strong>Easing:</strong> ease-out<br>
+                        <strong>Examples:</strong><br>
+                        • Form submission (loading → success)<br>
+                        • Modal fade in/out<br>
+                        • Tab/accordion open/close
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">Loading States</div>
+                    <div class="card-description">
+                        <strong>Spinner:</strong> rotate 360°<br>
+                        <strong>Duration:</strong> 1s (continuous)<br>
+                        <strong>Button:</strong> Disabled + spinner icon<br>
+                        <strong>Toast:</strong> Auto-dismiss 3-5s
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">❌ Anti-patterns</div>
+                    <div class="card-description">
+                        • Avoid animations > 500ms<br>
+                        • No decorative-only animations<br>
+                        • Don't animate width/height<br>
+                        • Respect prefers-reduced-motion<br>
+                        • Don't block user input during animation
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Pre-Delivery Checklist -->
+        <section class="section">
+            <h2 class="section-title">✅ Pre-Delivery Checklist</h2>
+            <div class="checklist">
+                <div class="checklist-title">Before Shipping</div>
+                <ul class="checklist-items">
+                    <li>All buttons have visible focus rings</li>
+                    <li>All form fields have labels + error messages</li>
+                    <li>Touch targets ≥44×44px minimum</li>
+                    <li>No emojis as icons (use Heroicons/Lucide SVG)</li>
+                    <li>Dark mode tested independently</li>
+                    <li>Animations respect prefers-reduced-motion</li>
+                    <li>Loading states show spinner + disabled button</li>
+                    <li>Success/error toasts auto-dismiss in 3-5s</li>
+                    <li>Form state preserved on page reload</li>
+                    <li>All links/buttons keyboard-accessible</li>
+                    <li>Tested on mobile (375px), tablet (768px), desktop (1440px)</li>
+                    <li>Landscape orientation tested</li>
+                    <li>Color contrast verified with WebAIM</li>
+                    <li>Screen reader tested (NVDA/JAWS/VoiceOver)</li>
+                </ul>
+            </div>
+        </section>
+
+        <footer class="footer">
+            <p>🎨 Design System v1.0 — PostReels Video Scheduler</p>
+            <p>Flat Design • WCAG AAA • Responsive • Dark Mode</p>
+        </footer>
+    </div>
+</body>
+</html>
