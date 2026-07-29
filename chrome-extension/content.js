@@ -63,9 +63,28 @@ async function baixarReels(username, maxCount) {
           credentials: 'include'
         })
         const html = await pageResp.text()
-        // Try to find media in preloaded JSON
-        const matches = html.matchAll(/"video_versions":\[{"url":"([^"]+)"/g)
-        const urls = [...matches].map(m => m[1].replace(/\\u0026/g, '&'))
+        // Try to find media in preloaded JSON (video_versions)
+        const versionMatches = html.matchAll(/"video_versions":\[({"url":"[^"]+".*?})\]/g)
+        const urls = []
+        for (const m of versionMatches) {
+          try {
+            const versions = JSON.parse(`[${m[1]}]`)
+            const best = versions.sort((a, b) => (b.width || 0) - (a.width || 0))[0]
+            if (best?.url) urls.push(best.url.replace(/\\u0026/g, '&'))
+          } catch {}
+        }
+        // Also try DASH manifest URLs in page JSON
+        if (urls.length === 0) {
+          const dashMatches = html.match(/"video_dash_manifest":"([^"]+)"/g)
+          for (const dm of dashMatches || []) {
+            try {
+              const xml = JSON.parse('"' + dm.match(/"video_dash_manifest":"([^"]+)"/)[1].replace(/\\u0026/g, '&').replace(/\\"/g, '"') + '"')
+              // Simple DASH parsing inline
+              const urlMatch = xml.match(/<Representation[^>]*width="(\d+)"[^>]*>[\s\S]*?<BaseURL>([^<]+)<\/BaseURL>/)
+              if (urlMatch) urls.push(urlMatch[2])
+            } catch {}
+          }
+        }
         if (urls.length > 0) {
           status.log(`Encontrados ${urls.length} videos via scraping`, 'ok')
           const toDownload = maxCount > 0 ? urls.slice(0, maxCount) : urls
@@ -88,6 +107,25 @@ async function baixarReels(username, maxCount) {
 
   status.log(`${toDownload.length} reels encontrados. Obtendo URLs dos videos...`, 'ok')
 
+  // Helper: extract best quality from DASH manifest XML
+  function extractBestFromDash(xml) {
+    try {
+      const parser = new DOMParser()
+      const doc = parser.parseFromString(xml, 'text/xml')
+      const representations = doc.querySelectorAll('Representation')
+      let best = null
+      for (const rep of representations) {
+        const width = parseInt(rep.getAttribute('width')) || 0
+        const height = parseInt(rep.getAttribute('height')) || 0
+        const urlEl = rep.querySelector('BaseURL')
+        if (urlEl && (!best || width > best.width)) {
+          best = { url: urlEl.textContent.trim(), width, height }
+        }
+      }
+      return best?.url || null
+    } catch { return null }
+  }
+
   // Step 3: Get video URLs and download
   const videoUrls = []
 
@@ -95,13 +133,18 @@ async function baixarReels(username, maxCount) {
     const reel = toDownload[i]
     let videoUrl = null
 
-    // Method 1: Pick the highest quality video version
-    if (reel.video_versions && reel.video_versions.length > 0) {
+    // Method 1: Try DASH manifest first (highest quality source)
+    if (reel.video_dash_manifest) {
+      videoUrl = extractBestFromDash(reel.video_dash_manifest)
+    }
+
+    // Method 2: Pick the highest quality video version
+    if (!videoUrl && reel.video_versions && reel.video_versions.length > 0) {
       const sorted = [...reel.video_versions].sort((a, b) => (b.width || 0) - (a.width || 0))
       videoUrl = sorted[0].url
     }
 
-    // Method 2: Fetch individual post page for video URL
+    // Method 3: Fetch individual post page for video URL (with DASH)
     if (!videoUrl) {
       status.log(`[${i + 1}/${toDownload.length}] Buscando URL do reel ${reel.code}...`, 'info')
       try {
@@ -118,7 +161,10 @@ async function baixarReels(username, maxCount) {
         if (infoResp.ok) {
           const infoData = await infoResp.json()
           const media = infoData.items?.[0]
-          if (media?.video_versions?.length > 0) {
+          if (media?.video_dash_manifest) {
+            videoUrl = extractBestFromDash(media.video_dash_manifest)
+          }
+          if (!videoUrl && media?.video_versions?.length > 0) {
             const sorted = [...media.video_versions].sort((a, b) => (b.width || 0) - (a.width || 0))
             videoUrl = sorted[0].url
           }
@@ -126,7 +172,7 @@ async function baixarReels(username, maxCount) {
       } catch {}
     }
 
-    // Method 3: Navigate to post page and extract
+    // Method 4: Navigate to post page and extract
     if (!videoUrl) {
       try {
         const postResp = await fetch(`https://www.instagram.com/p/${reel.code}/`, {
