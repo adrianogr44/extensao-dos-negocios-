@@ -116,9 +116,9 @@ function runScript() {
   return { ok: true };
 }
 
-const SCHEDULE_TIMES = ['06:30', '11:30'];
-const SCHEDULE_CRON = '30 6,11 * * *';
-const SCHEDULE_VIDEOS = { '06:30': 2, '11:30': 3 };
+const SCHEDULE_TIMES = ['06:00'];
+const SCHEDULE_CRON = '0 6 * * *';
+const SCHEDULE_VIDEOS = { '06:00': 5 };
 const TZ = 'America/Sao_Paulo';
 
 function getSchedule() {
@@ -136,17 +136,13 @@ function getSchedule() {
 
 function startScheduler() {
   cron.schedule(SCHEDULE_CRON, () => {
-    const h = new Date().toLocaleString('en-US', { timeZone: TZ, hour: '2-digit', hour12: false });
-    const m = new Date().toLocaleString('en-US', { timeZone: TZ, minute: '2-digit' });
-    const key = `${h}:${m}`;
-    const maxVideos = SCHEDULE_VIDEOS[key] || 2;
-    broadcastLog({ type: 'system', text: `=== Postagem agendada (${key}, ${maxVideos} videos) ===`, ts: new Date().toISOString() });
+    broadcastLog({ type: 'system', text: `=== Postagem agendada (06:00, 5 videos com 1h de intervalo) ===`, ts: new Date().toISOString() });
     launchChromeIfNeeded();
     setTimeout(() => {
       const scriptPath = path.join(__dirname, 'postar-completo.js');
       if (runningProcess) return;
       logBuffer = [];
-      runningProcess = spawn('node', [scriptPath, maxVideos.toString()], { cwd: __dirname, shell: true });
+      runningProcess = spawn('node', [scriptPath], { cwd: __dirname, shell: true });
       runningProcess.stdout.on('data', (data) => {
         const lines = data.toString().split('\n').filter(Boolean);
         lines.forEach(line => broadcastLog({ type: 'stdout', text: line, ts: new Date().toISOString() }));

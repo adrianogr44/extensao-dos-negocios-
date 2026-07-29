@@ -26,32 +26,27 @@ function launchChromeIfNeeded() {
 }
 
 console.log('=== Agendador de Postagem Iniciado ===');
-console.log('Horarios: 06:30 e 11:30 (horario de Sao Paulo)');
+console.log('Horario: 06:00 (horario de Sao Paulo)');
+console.log('Intervalo de 1h entre cada video (5 videos/dia)');
 console.log('Logs salvos em: postar-log.txt\n');
-
-const VIDEOS_POR_HORARIO = { '06:30': 2, '11:30': 3 };
 
 async function executarPostagem() {
   launchChromeIfNeeded();
   await new Promise(r => setTimeout(r, 5000));
-  const h = new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo', hour: '2-digit', hour12: false });
-  const m = new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo', minute: '2-digit' });
-  const key = `${h}:${m}`;
-  const maxVideos = VIDEOS_POR_HORARIO[key] || 2;
-  log(`Iniciando postagem (${key}, ${maxVideos} videos)...`);
+  log('Iniciando postagem diaria...');
   try {
-    await postarCompleto(maxVideos);
+    await postarCompleto();
     log('Postagem concluida com sucesso.');
   } catch (err) {
     log(`ERRO na postagem: ${err.message}`);
   }
 }
 
-cron.schedule('30 6,11 * * *', executarPostagem, {
+cron.schedule('0 6 * * *', executarPostagem, {
   timezone: 'America/Sao_Paulo',
 });
 
-log('Agendador iniciado. Aguardando horarios: 06:30 e 11:30');
+log('Agendador iniciado. Aguardando 06:00...');
 console.log('Pressione Ctrl+C para parar.\n');
 
 process.on('SIGINT', () => {

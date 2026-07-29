@@ -6,6 +6,8 @@ const { chromium } = require('playwright');
 const REELS_VIDEO_DIR = process.env.VIDEOS_DIR || path.join(os.homedir(), 'Downloads', 'FabricaReels');
 const QUEUE_FILE = path.join(__dirname, 'posts-queue.json');
 const TIKTOK_DAILY_LIMIT = parseInt(process.env.TIKTOK_DAILY_LIMIT) || 5;
+const POST_INTERVAL_MS = (parseInt(process.env.POST_INTERVAL_MINUTES) || 60) * 60 * 1000;
+const POST_INTERVAL_RANDOM_MS = (parseInt(process.env.POST_INTERVAL_RANDOM_MINUTES) || 15) * 60 * 1000;
 
 function loadQueue() {
   if (!fs.existsSync(QUEUE_FILE)) {
@@ -150,6 +152,13 @@ async function main({ caption } = {}) {
 
     const postedCount = queue.videos.filter(v => v.postedTikTok).length;
     console.log(`Progresso: ${postedCount}/${queue.videos.length} videos postados no TikTok`);
+
+    if (i < toPost.length - 1) {
+      const delay = POST_INTERVAL_MS + Math.round(Math.random() * POST_INTERVAL_RANDOM_MS)
+      const delayMin = Math.round(delay / 60000)
+      console.log(`\n⏳ Aguardando ${delayMin} min ate o proximo video...`)
+      await new Promise(r => setTimeout(r, delay))
+    }
   }
 
   await page.close();

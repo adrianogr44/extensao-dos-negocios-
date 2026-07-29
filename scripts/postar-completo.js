@@ -8,6 +8,8 @@ const QUEUE_FILE = path.join(__dirname, 'posts-queue.json');
 const DEBUG_PORT = parseInt(process.env.CHROME_DEBUG_PORT) || 9222;
 const DAILY_LIMIT_INSTAGRAM = parseInt(process.env.INSTAGRAM_DAILY_LIMIT) || 5;
 const DAILY_LIMIT_TIKTOK = parseInt(process.env.TIKTOK_DAILY_LIMIT) || 5;
+const POST_INTERVAL_MS = (parseInt(process.env.POST_INTERVAL_MINUTES) || 60) * 60 * 1000;
+const POST_INTERVAL_RANDOM_MS = (parseInt(process.env.POST_INTERVAL_RANDOM_MINUTES) || 15) * 60 * 1000;
 
 function hoje() {
   return new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }).split('/').reverse().join('-');
@@ -356,6 +358,13 @@ async function main(maxVideos) {
     const postedIG = queue.videos.filter(v => v.postedInstagram).length;
     const postedTT = queue.videos.filter(v => v.postedTikTok).length;
     console.log(`\nProgresso: IG ${postedIG}/${queue.videos.length} | TT ${postedTT}/${queue.videos.length}`);
+
+    if (i < toPost.length - 1) {
+      const delay = POST_INTERVAL_MS + Math.round(Math.random() * POST_INTERVAL_RANDOM_MS)
+      const delayMin = Math.round(delay / 60000)
+      console.log(`\n⏳ Aguardando ${delayMin} min ate o proximo video...`)
+      await new Promise(r => setTimeout(r, delay))
+    }
   }
 
   await page.close();
