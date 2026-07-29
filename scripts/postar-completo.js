@@ -70,11 +70,11 @@ async function deleteVideoFile(videoPath) {
 }
 
 function getInstagramCaption() {
-  return process.env.INSTAGRAM_CAPTION || '#futebol #football #lamineyamal #fcbarcelona';
+  return process.env.INSTAGRAM_CAPTION || '#futebol #football #futebolbrasileiro #futebolarte #gol #jogada #ronaldo';
 }
 
 function getTikTokCaption() {
-  return process.env.TIKTOK_CAPTION || '#futebol #football #lamineyamal #fcbarcelona #messi #neymar';
+  return process.env.TIKTOK_CAPTION || '#futebol #football #futebolbrasileiro #fyp #foryou #gol #jogada #ronaldo';
 }
 
 async function screenshot(page, label) {

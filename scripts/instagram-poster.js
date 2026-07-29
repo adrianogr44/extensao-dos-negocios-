@@ -7,6 +7,11 @@ const QUEUE_FILE = path.join(__dirname, 'posts-queue.json');
 const DEBUG_PORT = parseInt(process.env.CHROME_DEBUG_PORT) || 9222;
 const CHROME_PATH = process.env.CHROME_PATH || 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 const DAILY_LIMIT = parseInt(process.env.INSTAGRAM_DAILY_LIMIT) || 5;
+
+function getCaption() {
+  return process.env.INSTAGRAM_CAPTION || '#futebol #football #futebolbrasileiro #futebolarte #gol #jogada #ronaldo';
+}
+
 const { chromium } = require('playwright');
 
 function naturalSort(a, b) {
@@ -84,7 +89,7 @@ async function postToInstagram(page, videoPath) {
   if (await captionArea.isVisible({ timeout: 10000 }).catch(() => false)) {
     await captionArea.click();
     await page.waitForTimeout(500);
-    await page.keyboard.type('TVアニメ『BLEACH 千年血戦篇』 最新情報を発表＆最新PV公開！ 新たな戦いの幕開け！ オープニング主題歌＆エンディング主題歌、さらに千年血戦篇の重要キャラクターたちの最新情報を公開しました！！', { delay: 30 });
+    await page.keyboard.type(getCaption(), { delay: 30 });
     await page.waitForTimeout(1000);
   }
 
@@ -109,7 +114,7 @@ async function postToTikTok(page, videoPath) {
   const captionBox = page.locator('div[contenteditable="true"]').first();
   if (await captionBox.isVisible({ timeout: 15000 }).catch(() => false)) {
     await captionBox.fill('');
-    await captionBox.fill('TVアニメ『BLEACH 千年血戦篇』 最新情報を発表＆最新PV公開！ 新たな戦いの幕開け！ オープニング主題歌＆エンディング主題歌、さらに千年血戦篇の重要キャラクターたちの最新情報を公開しました！！');
+    await captionBox.fill(getCaption());
     await page.waitForTimeout(1000);
   }
 
