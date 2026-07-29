@@ -95,9 +95,10 @@ async function baixarReels(username, maxCount) {
     const reel = toDownload[i]
     let videoUrl = null
 
-    // Method 1: Check if video_versions is in the media list response
+    // Method 1: Pick the highest quality video version
     if (reel.video_versions && reel.video_versions.length > 0) {
-      videoUrl = reel.video_versions[0].url
+      const sorted = [...reel.video_versions].sort((a, b) => (b.width || 0) - (a.width || 0))
+      videoUrl = sorted[0].url
     }
 
     // Method 2: Fetch individual post page for video URL
@@ -118,7 +119,8 @@ async function baixarReels(username, maxCount) {
           const infoData = await infoResp.json()
           const media = infoData.items?.[0]
           if (media?.video_versions?.length > 0) {
-            videoUrl = media.video_versions[0].url
+            const sorted = [...media.video_versions].sort((a, b) => (b.width || 0) - (a.width || 0))
+            videoUrl = sorted[0].url
           }
         }
       } catch {}
