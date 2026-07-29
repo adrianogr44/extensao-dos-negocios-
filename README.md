@@ -71,3 +71,13 @@ node scripts\dashboard.js
 Coloque os arquivos `.mp4` na pasta definida em `VIDEOS_DIR` (padrão: `~/Downloads/FabricaReels`).
 
 Os vídeos são nomeados em ordem (ex: `reel_1.mp4`, `reel_2.mp4`) e postados sequencialmente.
+
+## Formato padrão
+
+| Plataforma | Resolução | Aspect Ratio |
+|-----------|-----------|-------------|
+| Instagram Reels | 1080x1920 | 9:16 |
+| TikTok | 1080x1920 | 9:16 |
+| YouTube Shorts | 1080x1920 | 9:16 |
+
+Vídeos devem estar em **MP4**, codec **H.264**, 30fps, 1080x1920 (portrait).
