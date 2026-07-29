@@ -1,0 +1,73 @@
+# Fábrica de Reels — Automação de Postagem
+
+Sistema automatizado de postagem de vídeos no **Instagram** e **TikTok** usando Playwright + Chrome.
+
+## Estrutura
+
+```
+scripts/
+  postar-completo.js    # Posta em ambas plataformas (IG + TT)
+  tiktok-poster.js      # Posta apenas no TikTok
+  instagram-poster.js   # Posta apenas no Instagram
+  postar-agendado.js    # Agendador cron (06:30 e 11:30)
+  serve-studio.js       # Interface web (localhost:3939)
+  posting-studio.html   # UI do studio
+  launch-chrome.cmd     # Inicia Chrome com debug remoto
+  launch-chrome.ps1     # Versão PowerShell
+  dashboard.js          # Scraper de perfil Instagram
+```
+
+## Pré-requisitos
+
+- Node.js 18+
+- Google Chrome instalado
+- Playwright (`npm install`)
+- Contas logadas no Chrome (Instagram + TikTok)
+
+## Setup
+
+```bash
+# Instalar dependências
+npm install
+
+# Copiar e configurar variáveis de ambiente
+cp .env.example .env
+# Edite .env com suas configurações
+
+# Iniciar Chrome com debug remoto
+.\scripts\launch-chrome.ps1
+# ou
+scripts\launch-chrome.cmd
+```
+
+## Como usar
+
+### Postagem manual
+```bash
+node scripts\postar-completo.js     # Posta em IG + TT
+node scripts\tiktok-poster.js       # Só TikTok
+node scripts\instagram-poster.js    # Só Instagram
+```
+
+### Postagem agendada
+```bash
+node scripts\postar-agendado.js
+```
+
+### Interface web
+```bash
+node scripts\serve-studio.js
+# Abra http://localhost:3939
+```
+
+### Dashboard Instagram
+```bash
+node scripts\dashboard.js
+# Abra dashboard.html
+```
+
+## Colocando vídeos
+
+Coloque os arquivos `.mp4` na pasta definida em `VIDEOS_DIR` (padrão: `~/Downloads/FabricaReels`).
+
+Os vídeos são nomeados em ordem (ex: `reel_1.mp4`, `reel_2.mp4`) e postados sequencialmente.

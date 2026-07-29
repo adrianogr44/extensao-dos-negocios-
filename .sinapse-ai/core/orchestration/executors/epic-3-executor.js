@@ -1,0 +1,306 @@
+/**
+ * Epic3Executor - Spec Pipeline Executor
+ *
+ * Story: 0.3 - Epic Executors (AC2)
+ * Epic: Epic 0 - ADE Master Orchestrator
+ *
+ * Wraps the spec-pipeline.yaml workflow to generate specifications
+ * from requirements/PRD through phases: gather → assess → research → spec → critique
+ *
+ * @module core/orchestration/executors/epic-3-executor
+ * @version 1.0.0
+ */
+
+const fs = require('fs-extra');
+const path = require('path');
+const EpicExecutor = require('./epic-executor');
+const { classifyComplexity } = require('../spec-complexity');
+
+/**
+ * Spec Pipeline phases
+ */
+const SPEC_PHASES = [
+  'gather-requirements',
+  'assess-complexity',
+  'research-dependencies',
+  'write-spec',
+  'critique',
+];
+
+/**
+ * Epic 3 Executor - Spec Pipeline
+ * Generates specifications from requirements/stories
+ */
+class Epic3Executor extends EpicExecutor {
+  constructor(orchestrator) {
+    super(orchestrator, 3);
+    this.pipelinePath = this._getPath(
+      '.sinapse-ai',
+      'development',
+      'workflows',
+      'spec-pipeline.yaml',
+    );
+  }
+
+  /**
+   * Execute the Spec Pipeline
+   * @param {Object} context - Execution context
+   * @param {string} context.storyId - Story identifier
+   * @param {string} context.source - Source type (story, prd, prompt)
+   * @param {string} [context.prdPath] - Path to PRD if source is 'prd'
+   * @returns {Promise<Object>} Execution result with specPath
+   */
+  async execute(context) {
+    this._startExecution();
+
+    try {
+      const { storyId, source, prdPath, techStack } = context;
+
+      this._log(`Executing Spec Pipeline for ${storyId}`);
+      this._log(`Source: ${source}, Tech Stack: ${techStack ? 'detected' : 'none'}`);
+
+      // Validate inputs
+      if (!storyId) {
+        return this._failExecution('storyId is required');
+      }
+
+      // Check for existing spec
+      const existingSpec = await this._findExistingSpec(storyId);
+      if (existingSpec) {
+        this._log(`Found existing spec: ${existingSpec}`);
+        this._addArtifact('spec', existingSpec, { reused: true });
+        return this._completeExecution({
+          specPath: existingSpec,
+          reused: true,
+        });
+      }
+
+      // Execute spec pipeline phases
+      const phaseResults = {};
+      let specPath = null;
+      let specWasStubbed = false;
+
+      for (const phase of SPEC_PHASES) {
+        this._log(`Running phase: ${phase}`);
+
+        const phaseResult = await this._executePhase(phase, {
+          storyId,
+          source,
+          prdPath,
+          techStack,
+          previousPhases: phaseResults,
+        });
+
+        phaseResults[phase] = phaseResult;
+
+        if (!phaseResult.success) {
+          this._log(`Phase ${phase} failed`, 'warn');
+          // Continue to next phase unless critical
+          if (phase === 'write-spec') {
+            return this._failExecution(`Critical phase failed: ${phase}`);
+          }
+        }
+
+        // Extract spec path from write-spec phase
+        if (phase === 'write-spec' && phaseResult.specPath) {
+          specPath = phaseResult.specPath;
+        }
+      }
+
+      // Validate spec was created
+      if (!specPath) {
+        // Generate default spec path
+        specPath = this._getPath('docs', 'stories', storyId, 'spec.md');
+      }
+
+      // Check if spec file exists
+      if (!(await fs.pathExists(specPath))) {
+        // F1: try to generate a REAL spec via a real agent through the orchestrator.
+        const generated = await this._generateSpecViaAgent(storyId, source, techStack, context);
+        if (generated) {
+          await fs.ensureDir(path.dirname(specPath));
+          await fs.writeFile(specPath, generated);
+          this._log('Generated spec via real agent invocation');
+        } else {
+          // No executor wired (or agent produced nothing) → honest stub.
+          await this._createStubSpec(specPath, storyId, context);
+          this._log('Created stub spec (no real agent available)');
+          specWasStubbed = true;
+        }
+      }
+
+      this._addArtifact('spec', specPath);
+
+      // Collect complexity and requirements from phases
+      const assess = phaseResults['assess-complexity'] || {};
+      const complexity = assess.complexity || 'STANDARD';
+      const requirements = phaseResults['gather-requirements']?.requirements || [];
+
+      // M4 (AF-20260704 #9b): turn the COMPLEX≥16 rule from prose into a
+      // deterministic classification. Prefer the numeric dimension score when the
+      // assess phase provides one; otherwise fall back to the level string.
+      const classification = classifyComplexity(
+        typeof assess.score === 'number' ? assess.score : assess.dimensions || complexity,
+      );
+
+      // Honesty invariant (epic: orchestration-consolidation, F0a):
+      // if the spec was auto-stubbed (no real agent ran), report STUB, not success.
+      const specResult = {
+        specPath,
+        complexity: classification.level,
+        complexityScore: classification.score,
+        requiresRevisionCycle: classification.requiresRevisionCycle,
+        requiresFullSpecPipeline: classification.requiresFullSpecPipeline,
+        specPipelinePhases: classification.phases,
+        requirements,
+        phases: Object.keys(phaseResults),
+      };
+      return specWasStubbed
+        ? this._stubExecution(
+            'Spec auto-stubbed — real spec generation requires agent invocation',
+            specResult,
+          )
+        : this._completeExecution(specResult);
+    } catch (error) {
+      return this._failExecution(error);
+    }
+  }
+
+  /**
+   * Find existing spec for story
+   * @private
+   */
+  async _findExistingSpec(storyId) {
+    const possiblePaths = [
+      this._getPath('docs', 'stories', storyId, 'spec.md'),
+      this._getPath('docs', 'stories', storyId, 'SPEC.md'),
+      this._getPath('docs', 'specs', `${storyId}.md`),
+      this._getPath('.sinapse', 'specs', `${storyId}.md`),
+    ];
+
+    for (const specPath of possiblePaths) {
+      if (await fs.pathExists(specPath)) {
+        return specPath;
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Execute a single pipeline phase
+   * @private
+   */
+  async _executePhase(phase, _context) {
+    const taskPath = this._getPath('.sinapse-ai', 'development', 'tasks', `spec-${phase}.md`);
+
+    // Check if task file exists
+    if (!(await fs.pathExists(taskPath))) {
+      this._log(`Task file not found: ${taskPath}`, 'warn');
+      return { success: true, skipped: true, reason: 'task_not_found' };
+    }
+
+    // In a full implementation, this would invoke the agent
+    // For now, return success to allow pipeline to continue
+    return {
+      success: true,
+      phase,
+      timestamp: new Date().toISOString(),
+      // Stub values - real implementation invokes agents
+      complexity: phase === 'assess-complexity' ? 'STANDARD' : undefined,
+      requirements: phase === 'gather-requirements' ? [] : undefined,
+    };
+  }
+
+  /**
+   * Generate the spec by invoking a real agent through the orchestrator.
+   *
+   * epic: orchestration-consolidation, F1 — connects Epic 3 to the real executor
+   * (orchestrator.invokeAgent → SubagentDispatcher → claude). Returns the generated
+   * spec markdown, or null when no executor is wired or the agent produced nothing
+   * (the caller then falls back to an honest stub).
+   *
+   * @returns {Promise<string|null>} Generated spec markdown, or null
+   * @private
+   */
+  async _generateSpecViaAgent(storyId, source, techStack, context = {}) {
+    const invokeAgent = this.orchestrator && this.orchestrator.invokeAgent;
+    if (typeof invokeAgent !== 'function') {
+      return null; // No real executor wired → caller falls back to stub
+    }
+
+    const description =
+      `Generate a complete, implementation-ready specification (spec.md) for story "${storyId}". ` +
+      `Source: ${source || 'story'}. ` +
+      (techStack ? `Tech stack: ${JSON.stringify(techStack)}. ` : '') +
+      'Output ONLY the spec markdown: overview, scope (in/out), acceptance criteria, ' +
+      'dependencies and complexity estimate. No commentary outside the spec.';
+
+    try {
+      // Pass only serializable, prompt-relevant context — never the execution
+      // context wholesale (it carries `orchestrator: this` → circular reference).
+      const result = await invokeAgent(
+        { name: 'analyst' },
+        { id: `spec-${storyId}`, type: 'analysis', description },
+        { storyId, source, techStack, prdPath: context.prdPath },
+      );
+      const content = result && (result.output || result.content);
+      // Honesty: an agent "success" whose output is a CLI error banner or a
+      // few stray lines is NOT a spec. Require minimum substance + markdown
+      // structure before accepting, otherwise fall back to the honest stub.
+      const looksLikeSpec =
+        typeof content === 'string' &&
+        content.trim().length >= 200 &&
+        /^#{1,3}\s/m.test(content) &&
+        !/issue with the selected model|may not exist or you may not have access/i.test(content);
+      if (result && result.success !== false && looksLikeSpec) {
+        return content;
+      }
+      if (content && !looksLikeSpec) {
+        this._log('Agent output rejected (not a plausible spec) — falling back to stub', 'warn');
+      }
+    } catch (err) {
+      this._log(`Spec agent invocation failed: ${err.message}`, 'warn');
+    }
+    return null;
+  }
+
+  /**
+   * Create stub spec file
+   * @private
+   */
+  async _createStubSpec(specPath, storyId, context) {
+    const stubContent = `# Specification: ${storyId}
+
+> **Status:** Draft (Auto-generated stub)
+> **Generated:** ${new Date().toISOString()}
+> **Tech Stack:** ${context.techStack ? JSON.stringify(context.techStack, null, 2) : 'Not detected'}
+
+## Overview
+
+This is an auto-generated specification stub. The full specification will be generated
+when the Spec Pipeline agents are invoked.
+
+## Requirements
+
+*To be gathered from ${context.source || 'story'}*
+
+## Complexity Assessment
+
+*To be assessed*
+
+## Implementation Notes
+
+*To be researched*
+
+---
+*Generated by Epic 3 Executor - Spec Pipeline*
+`;
+
+    await fs.ensureDir(path.dirname(specPath));
+    await fs.writeFile(specPath, stubContent);
+  }
+}
+
+module.exports = Epic3Executor;
+

@@ -1,0 +1,289 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/caioimori/sinapse-ai/schemas/squad-schema.json",
+  "title": "SINAPSE Squad Manifest (Canonical Flat Schema)",
+  "description": "Canonical schema for squad.yaml manifests. Flat structure — fields at root level (NOT nested under `squad:`). Compatible with the 18 squads in `squads/`.",
+  "type": "object",
+  "required": ["name", "version", "description"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z0-9-]+$",
+      "description": "Squad name in kebab-case",
+      "minLength": 2,
+      "maxLength": 50
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Semantic version (e.g., 1.0.0)"
+    },
+    "display_name": {
+      "type": "string",
+      "maxLength": 100,
+      "description": "Human-friendly display name"
+    },
+    "short-title": {
+      "type": "string",
+      "maxLength": 100
+    },
+    "domain": {
+      "type": "string",
+      "maxLength": 200,
+      "description": "Domain of expertise (free-text)"
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 2000
+    },
+    "philosophy": {
+      "type": "string",
+      "description": "Squad philosophy / guiding principles"
+    },
+    "author": { "type": "string" },
+    "license": {
+      "type": "string",
+      "enum": ["MIT", "Apache-2.0", "ISC", "GPL-3.0", "UNLICENSED"],
+      "default": "MIT"
+    },
+    "slashPrefix": {
+      "type": "string",
+      "pattern": "^[A-Za-z][A-Za-z0-9-]*$"
+    },
+    "entry_agent": {
+      "type": "string",
+      "description": "ID of the orchestrator / entry-point agent"
+    },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "keywords": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Alias of tags (legacy)"
+    },
+    "sinapse": {
+      "type": "object",
+      "properties": {
+        "minVersion": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+        "type": { "type": "string", "enum": ["squad"] }
+      }
+    },
+    "requires": {
+      "type": "object",
+      "properties": {
+        "node": { "type": "string" },
+        "sinapse": { "type": "string" }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Free-form metadata (created_at, updated_at, counts, etc.)",
+      "additionalProperties": true
+    },
+    "tiers": {
+      "type": "object",
+      "description": "Tier architecture: tier_0/tier_1/...; each tier lists agent ids",
+      "patternProperties": {
+        "^tier_\\d+$": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string" },
+            "purpose": { "type": "string" },
+            "agents": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "agents": {
+      "description": "Optional rich registry of agents. Either an array of file names OR a dict of id -> metadata.",
+      "oneOf": [
+        {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              { "type": "string" },
+              {
+                "type": "object",
+                "required": ["id"],
+                "properties": {
+                  "id": { "type": "string" },
+                  "name": { "type": "string" },
+                  "file": { "type": "string" },
+                  "role": { "type": "string" },
+                  "tasks": { "type": "array", "items": { "type": "string" } }
+                },
+                "additionalProperties": true
+              }
+            ]
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "file": { "type": "string" },
+              "tier": { "type": "integer" },
+              "icon": { "type": "string" },
+              "focus": { "type": "string" },
+              "based_on": { "type": "string" }
+            },
+            "additionalProperties": true
+          }
+        }
+      ]
+    },
+    "agents_registry": {
+      "type": "object",
+      "description": "Alias for `agents` when using dict form (avoids ambiguity with flat array form). Used by claude-code-mastery.",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "file": { "type": "string" },
+          "tier": { "type": "integer" },
+          "icon": { "type": "string" },
+          "focus": { "type": "string" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "handoffs": {
+      "type": "object",
+      "description": "Handoff matrix: agent_id -> { routes_to, collaborates_with, escalates_to }",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "routes_to": { "type": "array", "items": { "type": "string" } },
+          "collaborates_with": { "type": "array", "items": { "type": "string" } },
+          "escalates_to": { "type": "array", "items": { "type": "string" } }
+        },
+        "additionalProperties": true
+      }
+    },
+    "cross_cutting": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "cross_squad_connections": {
+      "type": "object",
+      "description": "Inter-squad coordination (handoffs across squads)",
+      "additionalProperties": true
+    },
+    "cross_squad_handoffs": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "quality_standards": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "settings": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "components": {
+      "type": "object",
+      "description": "Authoritative file lists synced from filesystem",
+      "properties": {
+        "agents": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "tasks": { "type": "array", "items": { "type": "string" } },
+        "workflows": { "type": "array", "items": { "type": "string" } },
+        "checklists": { "type": "array", "items": { "type": "string" } },
+        "templates": { "type": "array", "items": { "type": "string" } },
+        "tools": { "type": "array", "items": { "type": "string" } },
+        "scripts": { "type": "array", "items": { "type": "string" } },
+        "knowledge_bases": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": true
+    },
+    "workflows": {
+      "description": "Workflow definitions (legacy top-level form). Prefer components.workflows.",
+      "oneOf": [
+        { "type": "array" },
+        { "type": "object" }
+      ]
+    },
+    "templates": {
+      "oneOf": [
+        { "type": "array" },
+        { "type": "object" }
+      ]
+    },
+    "checklists": {
+      "oneOf": [
+        { "type": "array" },
+        { "type": "object" }
+      ]
+    },
+    "knowledge_bases": {
+      "oneOf": [
+        { "type": "array" },
+        { "type": "object" }
+      ]
+    },
+    "knowledge_base": {
+      "oneOf": [
+        { "type": "array" },
+        { "type": "object" }
+      ]
+    },
+    "tasks": {
+      "oneOf": [
+        { "type": "array" },
+        { "type": "object" }
+      ]
+    },
+    "total_tasks": {
+      "type": ["integer", "string"]
+    },
+    "preferences": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "scripts": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "config": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "dependencies": {
+      "type": "object",
+      "properties": {
+        "node": { "type": "array", "items": { "type": "string" } },
+        "python": { "type": "array", "items": { "type": "string" } },
+        "squads": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": true
+    },
+    "mcps": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "integration": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "core_concepts": {
+      "additionalProperties": true
+    },
+    "changelog": {
+      "oneOf": [
+        { "type": "array" },
+        { "type": "object" },
+        { "type": "string" }
+      ]
+    }
+  },
+  "additionalProperties": true
+}

@@ -1,0 +1,345 @@
+/**
+ * Epic4Executor - Execution Engine Executor
+ *
+ * Story: 0.3 - Epic Executors (AC3)
+ * Epic: Epic 0 - ADE Master Orchestrator
+ *
+ * Wraps plan-tracker and subtask-verifier to execute implementation plans.
+ * Tracks progress, verifies subtask completion, manages build state.
+ *
+ * @module core/orchestration/executors/epic-4-executor
+ * @version 1.0.0
+ */
+
+const fs = require('fs-extra');
+const path = require('path');
+const yaml = require('js-yaml');
+const EpicExecutor = require('./epic-executor');
+
+/**
+ * Epic 4 Executor - Execution Engine
+ * Manages plan execution and subtask verification
+ */
+class Epic4Executor extends EpicExecutor {
+  constructor(orchestrator) {
+    super(orchestrator, 4);
+
+    // Lazy-load infrastructure scripts
+    this._planTracker = null;
+    this._subtaskVerifier = null;
+  }
+
+  /**
+   * Get PlanTracker instance
+   * @private
+   */
+  _getPlanTracker() {
+    if (!this._planTracker) {
+      try {
+        // Path fix (audit AF-20260702 item 1.11): from executors/ this is 3
+        // levels up to .sinapse-ai/, not 2 — the old path resolved to the
+        // nonexistent core/infrastructure/. module.exports is an object, so
+        // the destructure is required too (a bare require(...) would have
+        // made `new PlanTracker(...)` explode on the exports object itself).
+        const { PlanTracker } = require('../../../infrastructure/scripts/plan-tracker');
+        this._planTracker = PlanTracker;
+      } catch (error) {
+        this._log(`PlanTracker not available: ${error.message}`, 'warn');
+      }
+    }
+    return this._planTracker;
+  }
+
+  /**
+   * Get SubtaskVerifier instance
+   * @private
+   */
+  _getSubtaskVerifier() {
+    if (!this._subtaskVerifier) {
+      try {
+        const SubtaskVerifier = require('../../infrastructure/scripts/subtask-verifier');
+        this._subtaskVerifier = SubtaskVerifier;
+      } catch (error) {
+        this._log(`SubtaskVerifier not available: ${error.message}`, 'warn');
+      }
+    }
+    return this._subtaskVerifier;
+  }
+
+  /**
+   * Execute the Execution Engine
+   * @param {Object} context - Execution context
+   * @param {string} context.spec - Path to specification
+   * @param {string} context.complexity - Complexity level
+   * @param {string} context.storyId - Story identifier
+   * @returns {Promise<Object>} Execution result
+   */
+  async execute(context) {
+    this._startExecution();
+
+    try {
+      const { spec, specPath, complexity, storyId, techStack: _techStack } = context;
+      const actualSpecPath = spec || specPath;
+
+      this._log(`Executing for story: ${storyId}`);
+      this._log(`Complexity: ${complexity || 'STANDARD'}`);
+
+      // Find or create implementation plan
+      const planPath = await this._findOrCreatePlan(storyId, actualSpecPath);
+      this._log(`Using plan: ${planPath}`);
+      this._addArtifact('plan', planPath);
+
+      // Load plan tracker
+      const PlanTracker = this._getPlanTracker();
+      let tracker = null;
+      let planStatus = null;
+
+      if (PlanTracker) {
+        tracker = new PlanTracker({
+          storyId,
+          planPath,
+          rootPath: this.projectRoot,
+        });
+
+        // Get initial status
+        try {
+          await tracker.loadPlan();
+          planStatus = tracker.getStatus();
+          this._log(`Plan status: ${planStatus.completed}/${planStatus.total} subtasks`);
+        } catch (error) {
+          this._log(`Could not load plan: ${error.message}`, 'warn');
+        }
+      }
+
+      // F1/convergência (epic: orchestration-consolidation): Epic 4 no longer
+      // re-implements execution. It DELEGATES to the BuildOrchestrator — the single
+      // real build path (worktree → plan → execute via claude → QA → merge). This
+      // kills the duplication the audit flagged (two competing execution engines).
+      if (this._realExecutionAllowed()) {
+        const buildResult = await this._executeViaBuildOrchestrator(storyId, context);
+        if (buildResult && buildResult.success) {
+          // Honesty invariant (epic: empty-build-honesty): do NOT set
+          // `implementationPath = planPath`. A plan path ALWAYS exists and is NOT
+          // proof of implementation — the multi-story measurement caught the gate
+          // approving an empty build because of exactly this. Surface the REAL files
+          // the build touched so the epic4_to_epic6 gate can tell an implementation
+          // apart from an empty "success".
+          const codeChanges = Array.isArray(buildResult.filesModified)
+            ? buildResult.filesModified
+            : [];
+          return this._completeExecution({
+            // Story onda2-p3: a plan-only run persists the REAL plan story-scoped;
+            // prefer that path over the pre-created stub location.
+            planPath: buildResult.planPath || planPath,
+            ...(buildResult.planOnly === true ? { planOnly: true } : {}),
+            // F5 (epic: orchestration-consolidation): propagate the real plan object
+            // so the downstream epic4_to_epic6 gate can verify it is not degraded/stub.
+            plan: buildResult.plan,
+            build: buildResult,
+            codeChanges,
+            filesModified: codeChanges,
+            reportPath: buildResult.reportPath,
+            phases: buildResult.phases,
+          });
+        }
+        // Build actually ran and failed → honest failure (not a stub, not fake success).
+        return this._failExecution(
+          (buildResult && buildResult.error) || 'BuildOrchestrator failed',
+        );
+      }
+
+      // Fallback (test runner without SINAPSE_REAL_DISPATCH): honest stub — never
+      // fabricate success. Preserves the F0a invariant and keeps unit tests fast.
+      const subtaskResults = await this._executeSubtasks(storyId, tracker, context);
+      const codeChanges = this._collectCodeChanges(subtaskResults);
+      const testResults = await this._runTests(context);
+      const progress = {
+        total: subtaskResults.length,
+        completed: subtaskResults.filter((r) => r.success).length,
+        failed: subtaskResults.filter((r) => !r.success).length,
+      };
+      this._addArtifact('progress', JSON.stringify(progress));
+      return this._stubExecution(
+        'Epic 4 stub mode — real build is delegated to BuildOrchestrator outside the test runner',
+        {
+          // Honesty invariant (epic: empty-build-honesty): no `implementationPath`
+          // here — the plan path is not an implementation. The stub already reports
+          // success:false, and `codeChanges` carries whatever real files (if any)
+          // the subtasks touched.
+          planPath,
+          progress,
+          subtaskResults,
+          codeChanges,
+          testResults,
+        },
+      );
+    } catch (error) {
+      return this._failExecution(error);
+    }
+  }
+
+  /**
+   * Delegate execution to the BuildOrchestrator — the single real build path.
+   *
+   * epic: orchestration-consolidation, F1/convergence — instead of re-implementing
+   * the build (and duplicating it), Epic 4 hands off to the BuildOrchestrator, which
+   * runs plan → execute (claude) → QA → merge. Conservative defaults inside the
+   * pipeline (no worktree/merge side-effects, QA is Epic 6's job); tune via
+   * context.buildOptions.
+   *
+   * @returns {Promise<Object>} BuildOrchestrator result ({ success, ... })
+   * @private
+   */
+  async _executeViaBuildOrchestrator(storyId, context) {
+    try {
+      const { BuildOrchestrator } = require('../../execution/build-orchestrator');
+      // buildOptions is passed once, via build() — which already merges it over
+      // the constructor config ({...this.config, ...options}). Passing it in both
+      // places (AF-20260704 Lote B) was redundant, not wrong.
+      const builder = new BuildOrchestrator({
+        rootPath: this.projectRoot,
+        useWorktree: false,
+        autoMerge: false,
+        runQA: false,
+      });
+      return await builder.build(storyId, context.buildOptions || {});
+    } catch (err) {
+      this._log(`BuildOrchestrator delegation failed: ${err.message}`, 'error');
+      return { success: false, error: err.message };
+    }
+  }
+
+  /**
+   * Find existing plan or create new one
+   * @private
+   */
+  async _findOrCreatePlan(storyId, specPath) {
+    // Look for existing implementation plan
+    const possiblePaths = [
+      this._getPath('docs', 'stories', storyId, 'plan', 'implementation.yaml'),
+      this._getPath('docs', 'stories', storyId, 'implementation.yaml'),
+      this._getPath('.sinapse', 'plans', `${storyId}.yaml`),
+    ];
+
+    for (const planPath of possiblePaths) {
+      if (await fs.pathExists(planPath)) {
+        return planPath;
+      }
+    }
+
+    // Create stub plan
+    const planPath = this._getPath('docs', 'stories', storyId, 'plan', 'implementation.yaml');
+    await this._createStubPlan(planPath, storyId, specPath);
+
+    return planPath;
+  }
+
+  /**
+   * Create stub implementation plan
+   * @private
+   */
+  async _createStubPlan(planPath, storyId, specPath) {
+    const now = new Date().toISOString();
+
+    // Build the plan as an object and serialize via yaml.dump. This is robust to
+    // any content — notably Windows absolute paths in `specPath`
+    // (e.g. "C:\Users\...\AppData\...") which, when hand-written into a
+    // double-quoted YAML scalar, contain invalid escape sequences (`\U`, `\A`)
+    // that make `yaml.load` throw and kill the whole build path on Windows.
+    // yaml.dump escapes/quotes correctly for any value (Story: FIX windows-path-yaml-plan).
+    const planObject = {
+      metadata: {
+        storyId,
+        specPath: specPath || 'N/A',
+        status: 'draft',
+        createdAt: now,
+      },
+      phases: [
+        {
+          phase: 1,
+          name: 'Setup',
+          subtasks: [{ id: '1.1', name: 'Initialize project structure', status: 'pending' }],
+        },
+        {
+          phase: 2,
+          name: 'Implementation',
+          subtasks: [{ id: '2.1', name: 'Implement core functionality', status: 'pending' }],
+        },
+        {
+          phase: 3,
+          name: 'Testing',
+          subtasks: [{ id: '3.1', name: 'Write tests', status: 'pending' }],
+        },
+        {
+          phase: 4,
+          name: 'Documentation',
+          subtasks: [{ id: '4.1', name: 'Update documentation', status: 'pending' }],
+        },
+      ],
+    };
+
+    const header = `# Implementation Plan: ${storyId}\n# Generated: ${now}\n\n`;
+    const stubPlan = header + yaml.dump(planObject, { lineWidth: -1, noRefs: true });
+
+    await fs.ensureDir(path.dirname(planPath));
+    await fs.writeFile(planPath, stubPlan);
+    this._log('Created stub implementation plan');
+  }
+
+  /**
+   * Execute subtasks from plan
+   * @private
+   */
+  async _executeSubtasks(_storyId, _tracker, _context) {
+    const results = [];
+
+    // In full implementation, this would iterate through subtasks
+    // and invoke agents for each one. For now, return stub results.
+    results.push({
+      subtaskId: '1.1',
+      name: 'Initialize',
+      success: true,
+      duration: '0s',
+      timestamp: new Date().toISOString(),
+    });
+
+    return results;
+  }
+
+  /**
+   * Collect code changes from subtask results
+   * @private
+   */
+  _collectCodeChanges(subtaskResults) {
+    const changes = [];
+
+    for (const result of subtaskResults) {
+      if (result.files) {
+        changes.push(...result.files);
+      }
+    }
+
+    return changes;
+  }
+
+  /**
+   * Run tests
+   * @private
+   */
+  async _runTests(_context) {
+    // Check if tests exist
+    const testsDir = this._getPath('tests');
+    if (!(await fs.pathExists(testsDir))) {
+      return { skipped: true, reason: 'no_tests_dir' };
+    }
+
+    // In full implementation, would run actual tests
+    return {
+      ran: false,
+      reason: 'test_execution_requires_agent',
+    };
+  }
+}
+
+module.exports = Epic4Executor;
+

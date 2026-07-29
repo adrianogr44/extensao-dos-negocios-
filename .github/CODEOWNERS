@@ -1,0 +1,12 @@
+# Code Owners — fabrica-reels
+# All PRs require approval from an owner before merge.
+
+# Default: all files require maintainer review
+* @adrianogr44
+
+# Framework and agent configuration
+.sinapse-ai/ @adrianogr44
+.claude/      @adrianogr44
+
+# CI/CD and GitHub config
+.github/      @adrianogr44
