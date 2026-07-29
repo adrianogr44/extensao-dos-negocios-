@@ -23,10 +23,39 @@ function broadcastTasks() {
   broadcastToPopup({ type: 'TASKS_UPDATED', payload: tasks })
 }
 
-async function startDownloads(shortcodes: string[], videoUrls: Record<string, string>, nicheId: string, profile?: ProfileInfo, platform: 'INSTAGRAM' | 'FACEBOOK' | 'YOUTUBE' = 'INSTAGRAM') {
+async function startDownloads(shortcodes: string[], videoUrls: Record<string, string>, nicheId: string, profile?: ProfileInfo, platform: 'INSTAGRAM' | 'FACEBOOK' | 'YOUTUBE' = 'INSTAGRAM', redownload: boolean = false) {
   const config = await getConfig()
-  const limit = config.maxDownloads || shortcodes.length
-  const toDownload = shortcodes.slice(0, limit)
+
+  let filteredShortcodes = shortcodes
+  if (!redownload) {
+    try {
+      const res = await fetch(`${config.apiUrl}/api/videos/check-existing`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shortcodes, nicheId, platform }),
+      })
+      const data = await res.json()
+      if (data.success && data.data?.existing?.length) {
+        const existingSet = new Set<string>(data.data.existing)
+        filteredShortcodes = shortcodes.filter(sc => !existingSet.has(sc))
+        const skipped = shortcodes.length - filteredShortcodes.length
+        if (skipped > 0) {
+          console.log(`[Background] Pulando ${skipped} vídeos já existentes na base`)
+        }
+      }
+    } catch (err) {
+      console.error('[Background] Erro ao verificar vídeos existentes:', err)
+    }
+  }
+
+  if (filteredShortcodes.length === 0) {
+    console.log('[Background] Nenhum vídeo novo para baixar')
+    broadcastTasks()
+    return
+  }
+
+  const limit = config.maxDownloads || filteredShortcodes.length
+  const toDownload = filteredShortcodes.slice(0, limit)
 
   const newTasks: DownloadTask[] = toDownload.map(sc => ({
     id: crypto.randomUUID(),
@@ -79,11 +108,11 @@ export default defineBackground(() => {
         break
       }
       case 'START_DOWNLOAD': {
-        const { shortcodes, videoUrls, nicheId, profile, platform = 'INSTAGRAM' } = message.payload
+        const { shortcodes, videoUrls, nicheId, profile, platform = 'INSTAGRAM', redownload = false } = message.payload
         console.log('[Background] Iniciando download de', shortcodes.length, 'vídeos')
         pendingDownload = null
         chrome.action.setBadgeText({ text: '' })
-        startDownloads(shortcodes, videoUrls, nicheId, profile, platform)
+        startDownloads(shortcodes, videoUrls, nicheId, profile, platform, redownload)
         sendResponse({ success: true })
         break
       }

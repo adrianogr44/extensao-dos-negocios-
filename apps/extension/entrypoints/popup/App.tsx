@@ -21,6 +21,7 @@ export default function App() {
   const [pending, setPending] = useState<PendingDownload | null>(null)
   const [selectedNiche, setSelectedNiche] = useState('')
   const [maxDownloads, setMaxDownloads] = useState(20)
+  const [redownload, setRedownload] = useState(false)
   const [logs, setLogs] = useState<string[]>([])
 
   const addLog = useCallback((msg: string) => {
@@ -76,6 +77,7 @@ export default function App() {
       nicheId: selectedNiche,
       profile: pending.profile,
       platform: pending.platform,
+      redownload,
     })
     setPending(null)
   }, [selectedNiche, pending, addLog])
@@ -159,6 +161,14 @@ export default function App() {
           onChange={e => setMaxDownloads(parseInt(e.target.value) || 1)}
           style={inputStyle}
         />
+        <label style={{ fontSize: 12, color: '#999', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+          <input
+            type="checkbox"
+            checked={redownload}
+            onChange={e => setRedownload(e.target.checked)}
+          />
+          Baixar novamente vídeos já existentes
+        </label>
         <button onClick={handleSaveConfig} style={btnStyle}>
           Salvar Config
         </button>

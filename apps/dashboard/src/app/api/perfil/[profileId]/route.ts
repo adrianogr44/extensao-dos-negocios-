@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { deleteFile } from '@/lib/minio'
 import { convertBigInts } from '@/lib/utils'
 
 export async function GET(_req: Request, { params }: { params: { profileId: string } }) {
@@ -35,6 +36,19 @@ export async function DELETE(_req: Request, { params }: { params: { profileId: s
     return NextResponse.json({ success: false, error: 'Perfil não encontrado' }, { status: 404 })
   }
 
+  const videos = await prisma.video.findMany({
+    where: { profileId: params.profileId },
+    select: { minioBucket: true, minioKey: true, thumbnail: true },
+  })
+
+  for (const video of videos) {
+    await deleteFile(video.minioBucket, video.minioKey).catch(() => {})
+    if (video.thumbnail) {
+      await deleteFile(video.minioBucket, video.thumbnail).catch(() => {})
+    }
+  }
+
+  await prisma.video.deleteMany({ where: { profileId: params.profileId } })
   await prisma.profile.delete({ where: { id: params.profileId } })
 
   return NextResponse.json({ success: true })
