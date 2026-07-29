@@ -227,6 +227,32 @@ const server = http.createServer((req, res) => {
     return sendJson(res, { ok: true });
   }
 
+  if (pathname === '/api/queue/reset-posted' && req.method === 'POST') {
+    const q = getQueue();
+    q.videos.forEach(v => { v.postedInstagram = false; v.postedTikTok = false; });
+    q.dailyCount = 0;
+    q.dailyCountTikTok = 0;
+    q.lastPostDate = '';
+    fs.writeFileSync(QUEUE_FILE, JSON.stringify(q, null, 2));
+    return sendJson(res, { ok: true });
+  }
+
+  if (pathname === '/api/queue/reset-errors' && req.method === 'POST') {
+    const q = getQueue();
+    q.videos.forEach(v => { v.error = null; });
+    fs.writeFileSync(QUEUE_FILE, JSON.stringify(q, null, 2));
+    return sendJson(res, { ok: true });
+  }
+
+  if (pathname === '/api/queue/reset-daily' && req.method === 'POST') {
+    const q = getQueue();
+    q.dailyCount = 0;
+    q.dailyCountTikTok = 0;
+    q.lastPostDate = '';
+    fs.writeFileSync(QUEUE_FILE, JSON.stringify(q, null, 2));
+    return sendJson(res, { ok: true });
+  }
+
   if (pathname === '/api/chrome' && req.method === 'POST') {
     const chromeLauncher = path.join(__dirname, 'launch-chrome.cmd');
     if (fs.existsSync(chromeLauncher)) {

@@ -207,7 +207,9 @@ body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg)
         <button class="btn btn-primary" id="btnRun">&#9654; Executar Agora</button>
         <button class="btn btn-danger" id="btnStop" disabled>&#9632; Parar</button>
         <button class="btn btn-outline" onclick="openChrome()">&#127760; Abrir Chrome</button>
-        <button class="btn btn-outline" onclick="resetQueue()">&#8635; Resetar Fila</button>
+        <button class="btn btn-outline" onclick="resetPosted()">&#8635; Zerar Postados</button>
+        <button class="btn btn-outline" onclick="resetDaily()">&#128197; Zerar Hoje</button>
+        <button class="btn btn-outline" onclick="resetErrors()">&#10003; Zerar Erros</button>
       </div>
     </div>
 
@@ -451,6 +453,31 @@ async function stopScript() {
 
 async function openChrome() {
   try { await fetch(BASE + '/api/chrome', { method: 'POST' }); } catch {}
+}
+
+async function resetPosted() {
+  if (!confirm('Zerar status de postagem de TODOS os videos?')) return;
+  try {
+    await fetch(BASE + '/api/queue/reset-posted', { method: 'POST' });
+    addLog('system', 'Status de postagem resetado para todos os videos');
+    loadQueue(); loadStats();
+  } catch {}
+}
+
+async function resetDaily() {
+  try {
+    await fetch(BASE + '/api/queue/reset-daily', { method: 'POST' });
+    addLog('system', 'Contagem diaria zerada');
+    loadStats();
+  } catch {}
+}
+
+async function resetErrors() {
+  try {
+    await fetch(BASE + '/api/queue/reset-errors', { method: 'POST' });
+    addLog('system', 'Erros limpos de todos os videos');
+    loadQueue(); loadStats();
+  } catch {}
 }
 
 async function resetQueue() {
