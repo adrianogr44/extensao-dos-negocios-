@@ -2,6 +2,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const { chromium } = require('playwright');
+const notify = require('./notify');
 
 // Carrega variaveis do .env manualmente (sem dependencia externa)
 try {
@@ -541,9 +542,13 @@ async function main(maxVideos) {
 
   console.log('Chrome conectado com sucesso!\n');
 
+  let totalErrors = 0;
+
   for (let i = 0; i < toPost.length; i++) {
     const video = toPost[i];
     console.log(`\n--- [${i + 1}/${toPost.length}] ${video.filename} ---`);
+
+    const results = {};
 
     if (!video.postedInstagram) {
       try {
@@ -552,12 +557,15 @@ async function main(maxVideos) {
         video.postedInstagram = true;
         video.instagramDate = new Date().toISOString();
         await igPage.close();
+        results.instagram = true;
       } catch (err) {
         console.error(`  [Instagram] ERRO: ${err.message}`);
         video.error = video.error ? `${video.error} | Instagram: ${err.message}` : `Instagram: ${err.message}`;
+        results.instagram = err.message;
+        totalErrors++;
       }
     } else {
-      console.log('  [Instagram] Ja postado, pulando...');
+      results.instagram = false;
     }
 
     await page.waitForTimeout(3000);
@@ -567,12 +575,15 @@ async function main(maxVideos) {
         await postToTikTok(page, video.path);
         video.postedTikTok = true;
         video.tiktokDate = new Date().toISOString();
+        results.tiktok = true;
       } catch (err) {
         console.error(`  [TikTok] ERRO: ${err.message}`);
         video.error = video.error ? `${video.error} | TikTok: ${err.message}` : `TikTok: ${err.message}`;
+        results.tiktok = err.message;
+        totalErrors++;
       }
     } else {
-      console.log('  [TikTok] Ja postado, pulando...');
+      results.tiktok = false;
     }
 
     await page.waitForTimeout(3000);
@@ -582,12 +593,15 @@ async function main(maxVideos) {
         await postToFacebook(browser, video.path);
         video.postedFacebook = true;
         video.facebookDate = new Date().toISOString();
+        results.facebook = true;
       } catch (err) {
         console.error(`  [Facebook] ERRO: ${err.message}`);
         video.error = video.error ? `${video.error} | Facebook: ${err.message}` : `Facebook: ${err.message}`;
+        results.facebook = err.message;
+        totalErrors++;
       }
     } else {
-      console.log('  [Facebook] Ja postado, pulando...');
+      results.facebook = false;
     }
 
     await page.waitForTimeout(3000);
@@ -599,12 +613,15 @@ async function main(maxVideos) {
         video.postedShorts = true;
         video.shortsDate = new Date().toISOString();
         await shortsPage.close();
+        results.shorts = true;
       } catch (err) {
         console.error(`  [Shorts] ERRO: ${err.message}`);
         video.error = video.error ? `${video.error} | Shorts: ${err.message}` : `Shorts: ${err.message}`;
+        results.shorts = err.message;
+        totalErrors++;
       }
     } else {
-      console.log('  [Shorts] Ja postado, pulando...');
+      results.shorts = false;
     }
 
     if (video.postedInstagram && video.postedTikTok && video.postedFacebook && video.postedShorts) {
@@ -613,6 +630,8 @@ async function main(maxVideos) {
 
     queue.lastPostDate = today;
     saveQueue(queue);
+
+    await notify.notifyVideoPosted(video, results);
 
     const postedIG = queue.videos.filter(v => v.postedInstagram).length;
     const postedTT = queue.videos.filter(v => v.postedTikTok).length;
@@ -637,13 +656,16 @@ async function main(maxVideos) {
   const totalSH = queue.videos.filter(v => v.postedShorts).length;
   console.log(`\n=== Concluido! IG: ${totalIG} | TT: ${totalTT} | FB: ${totalFB} | SH: ${totalSH} / ${queue.videos.length} videos ===`);
 
+  await notify.notifyRunSummary(toPost.length, totalErrors, { Instagram: totalIG, TikTok: totalTT, Facebook: totalFB, Shorts: totalSH });
+
   try { fs.unlinkSync(LOCK_FILE); } catch {}
 }
 
 if (require.main === module) {
   const maxVideos = process.argv[2] ? parseInt(process.argv[2], 10) : undefined;
-  main(maxVideos).catch(err => {
+  main(maxVideos).catch(async (err) => {
     console.error('Erro fatal:', err);
+    await notify.notifyError(err.message);
     process.exit(1);
   });
 }
