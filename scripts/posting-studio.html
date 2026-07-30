@@ -18,6 +18,7 @@
   --accent-hover: #e00045;
   --ig: #0095f6;
   --tt: #ff0050;
+  --fb: #1877f2;
   --green: #10b981;
   --yellow: #f59e0b;
   --red: #ef4444;
@@ -69,6 +70,7 @@ body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg)
 .stat-card .stat-bar-fill{height:100%;border-radius:0 2px 0 0;transition:width .5s}
 .stat-card.ig .stat-bar-fill{background:var(--ig)}
 .stat-card.tt .stat-bar-fill{background:var(--tt)}
+.stat-card.fb .stat-bar-fill{background:var(--fb)}
 .stat-card.both .stat-bar-fill{background:var(--green)}
 .stat-card.pending .stat-bar-fill{background:var(--yellow)}
 .stat-card.error .stat-bar-fill{background:var(--red)}
@@ -118,6 +120,8 @@ body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg)
 .video-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:8px}
 .video-card{display:flex;align-items:center;gap:12px;background:var(--surface);border-radius:var(--radius-sm);padding:10px 14px;border:1px solid var(--border);transition:.1s;font-size:13px}
 .video-card:hover{border-color:var(--text3)}
+.video-card .v-thumb{width:60px;height:106px;border-radius:6px;background:var(--surface2);flex-shrink:0;overflow:hidden;position:relative}
+.video-card .v-thumb video{width:100%;height:100%;object-fit:cover}
 .video-card .v-num{width:24px;height:24px;border-radius:6px;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--text3);flex-shrink:0}
 .video-card .v-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)}
 .video-card .v-platforms{display:flex;gap:6px;flex-shrink:0}
@@ -126,6 +130,12 @@ body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg)
 .video-card .v-platform.ig-pending{background:rgba(0,149,246,.08);color:var(--text3)}
 .video-card .v-platform.tt-done{background:rgba(255,0,80,.15);color:var(--tt)}
 .video-card .v-platform.tt-pending{background:rgba(255,0,80,.08);color:var(--text3)}
+.video-card .v-platform.fb-done{background:rgba(24,119,242,.15);color:var(--fb)}
+.video-card .v-platform.fb-pending{background:rgba(24,119,242,.08);color:var(--text3)}
+.video-card .v-platform.kw-done{background:rgba(255,85,0,.15);color:#f50}
+.video-card .v-platform.kw-pending{background:rgba(255,85,0,.08);color:var(--text3)}
+.video-card .v-platform.sh-done{background:rgba(255,0,0,.15);color:var(--red)}
+.video-card .v-platform.sh-pending{background:rgba(255,0,0,.08);color:var(--text3)}
 .video-card .v-err{color:var(--red);font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0}
 
 /* Tabs */
@@ -199,7 +209,7 @@ body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg)
       <div class="stats-grid" id="statsGrid"></div>
 
       <div class="schedule-bar">
-        <span class="label"><span class="icon-clock">&#9200;</span> Agendado: <span class="time" id="schedTimes">06:00 (5 videos)</span></span>
+        <span class="label"><span class="icon-clock">&#9200;</span> Agendado: <span id="schedTimesList"></span></span>
         <span class="next">Proximo: <span id="nextRun">-</span></span>
       </div>
 
@@ -315,19 +325,28 @@ async function loadStats() {
 async function loadSchedule() {
   try {
     const s = await fetchJson(BASE + '/api/schedule');
-    const times = s.nextRuns.map(r => `${r.time} (${r.videos} videos)`).join(', ');
-    document.getElementById('schedTimes').textContent = times || '06:00 (5 videos)';
+    const listEl = document.getElementById('schedTimesList');
+    if (listEl) {
+      listEl.innerHTML = s.nextRuns.map(r =>
+        `<span style="display:inline-block;background:var(--surface2);padding:2px 10px;border-radius:4px;font-size:12px;font-weight:600;color:var(--accent)">${r.time}</span>`
+      ).join(' ');
+    }
     document.getElementById('nextRun').textContent = s.nextRuns.length ? s.nextRuns[0].next : '-';
     renderSchedule(s);
-  } catch {}
+  } catch (e) {
+    console.error('loadSchedule error:', e);
+  }
 }
 
 function renderStats(s) {
   const allDone = s.total > 0 && s.pending === 0;
   if (allDone) updateStatus(false, true);
-  const pctTotal = s.total > 0 ? Math.round(s.bothPosted / s.total * 100) : 0;
+  const pctTotal = s.total > 0 ? Math.round(s.allPosted / s.total * 100) : 0;
   const pctIG = s.total > 0 ? Math.round(s.igPosted / s.total * 100) : 0;
   const pctTT = s.total > 0 ? Math.round(s.ttPosted / s.total * 100) : 0;
+  const pctFB = s.total > 0 ? Math.round(s.fbPosted / s.total * 100) : 0;
+  const pctKW = s.total > 0 ? Math.round(s.kwPosted / s.total * 100) : 0;
+  const pctSH = s.total > 0 ? Math.round(s.shPosted / s.total * 100) : 0;
 
   document.getElementById('statsGrid').innerHTML = `
     <div class="stat-card ig">
@@ -342,10 +361,28 @@ function renderStats(s) {
       <div class="stat-lbl">TikTok</div>
       <div class="stat-bar"><div class="stat-bar-fill" style="width:${pctTT}%"></div></div>
     </div>
+    <div class="stat-card fb">
+      <div class="stat-icon">&#9679;</div>
+      <div class="stat-val">${s.fbPosted}</div>
+      <div class="stat-lbl">Facebook</div>
+      <div class="stat-bar"><div class="stat-bar-fill" style="width:${pctFB}%"></div></div>
+    </div>
+    <div class="stat-card kw">
+      <div class="stat-icon">&#9654;</div>
+      <div class="stat-val">${s.kwPosted || 0}</div>
+      <div class="stat-lbl">Kwai</div>
+      <div class="stat-bar"><div class="stat-bar-fill" style="width:${pctKW}%"></div></div>
+    </div>
+    <div class="stat-card sh">
+      <div class="stat-icon">&#9654;</div>
+      <div class="stat-val">${s.shPosted || 0}</div>
+      <div class="stat-lbl">Shorts</div>
+      <div class="stat-bar"><div class="stat-bar-fill" style="width:${pctSH}%"></div></div>
+    </div>
     <div class="stat-card both">
       <div class="stat-icon">&#10003;</div>
-      <div class="stat-val">${s.bothPosted}</div>
-      <div class="stat-lbl">Ambas Plataformas</div>
+      <div class="stat-val">${s.allPosted || 0}</div>
+      <div class="stat-lbl">Todas Plataformas</div>
       <div class="stat-bar"><div class="stat-bar-fill" style="width:${pctTotal}%"></div></div>
     </div>
     <div class="stat-card pending">
@@ -366,6 +403,24 @@ function renderStats(s) {
       <div class="stat-lbl">Postados hoje (TT)</div>
       <div class="stat-bar"><div class="stat-bar-fill" style="width:${s.dailyLimit > 0 ? (s.dailyCountTikTok / s.dailyLimit * 100) : 0}%"></div></div>
     </div>
+    <div class="stat-card fb">
+      <div class="stat-icon">&#128197;</div>
+      <div class="stat-val">${s.dailyCountFacebook} <span style="font-size:14px;color:var(--text3)">/ ${s.dailyLimit}</span></div>
+      <div class="stat-lbl">Postados hoje (FB)</div>
+      <div class="stat-bar"><div class="stat-bar-fill" style="width:${s.dailyLimit > 0 ? (s.dailyCountFacebook / s.dailyLimit * 100) : 0}%"></div></div>
+    </div>
+    <div class="stat-card kw">
+      <div class="stat-icon">&#128197;</div>
+      <div class="stat-val">${s.dailyCountKwai || 0} <span style="font-size:14px;color:var(--text3)">/ ${s.dailyLimit}</span></div>
+      <div class="stat-lbl">Postados hoje (KW)</div>
+      <div class="stat-bar"><div class="stat-bar-fill" style="width:${s.dailyLimit > 0 ? ((s.dailyCountKwai || 0) / s.dailyLimit * 100) : 0}%"></div></div>
+    </div>
+    <div class="stat-card sh">
+      <div class="stat-icon">&#128197;</div>
+      <div class="stat-val">${s.dailyCountShorts || 0} <span style="font-size:14px;color:var(--text3)">/ ${s.dailyLimit}</span></div>
+      <div class="stat-lbl">Postados hoje (SH)</div>
+      <div class="stat-bar"><div class="stat-bar-fill" style="width:${s.dailyLimit > 0 ? ((s.dailyCountShorts || 0) / s.dailyLimit * 100) : 0}%"></div></div>
+    </div>
     ${s.withErrors > 0 ? `
     <div class="stat-card error">
       <div class="stat-icon">&#9888;</div>
@@ -378,23 +433,64 @@ function renderStats(s) {
 
 function renderSchedule(s) {
   const container = document.getElementById('schedulePanel');
+  const cfg = s.config || s;
+  const times = cfg.times || ['06:00', '08:00', '10:00', '12:00', '14:00'];
   container.innerHTML = `
-    <div style="margin-bottom:14px;font-size:13px;color:var(--text2)">
-      Fuso: <strong>${s.timezone}</strong> &middot; Intervalo de 1h entre posts
+    <div style="margin-bottom:16px;font-size:13px;color:var(--text2)">
+      Fuso: <strong>${s.timezone}</strong>
     </div>
-    ${s.nextRuns.map(r => {
-      const pct = r.videos / 5 * 100;
-      return `
-        <div class="sched-row">
-          <span class="sched-dot"></span>
-          <span class="sched-time">${r.time}</span>
-          <div class="sched-bar"><div class="sched-bar-fill" style="width:${pct}%"></div></div>
-          <span class="sched-label">${r.videos} videos</span>
-          <span style="font-size:11px;color:var(--text3)">${r.next}</span>
+    <div style="background:var(--surface);border-radius:var(--radius);padding:18px;border:1px solid var(--border)">
+      <div style="margin-bottom:12px;font-size:13px;font-weight:600">Horarios dos 5 videos diarios</div>
+      ${times.map((t, i) => `
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+          <span style="font-size:12px;color:var(--text3);width:20px">${i+1}.</span>
+          <input type="time" value="${t}" data-idx="${i}" class="sched-input" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:7px 12px;color:var(--text);font-size:13px;width:130px">
+          <span style="font-size:11px;color:var(--text3)">→ ${s.nextRuns[i] ? s.nextRuns[i].next : '-'}</span>
         </div>
-      `;
-    }).join('')}
+      `).join('')}
+      <div style="display:flex;gap:8px;margin-top:14px">
+        <button class="btn btn-primary btn-sm" onclick="saveSchedule()">Salvar Horarios</button>
+        <button class="btn btn-outline btn-sm" onclick="resetSchedule()">Restaurar Padrao</button>
+      </div>
+    </div>
   `;
+}
+
+async function saveSchedule() {
+  const inputs = document.querySelectorAll('.sched-input');
+  const times = Array.from(inputs).map(i => i.value).filter(Boolean);
+  try {
+    const r = await fetch(BASE + '/api/schedule-config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: true, times, timezone: 'America/Sao_Paulo' }),
+    });
+    const data = await r.json();
+    if (data.ok) {
+      addLog('system', 'Horarios salvos: ' + times.join(', '));
+      loadSchedule();
+    }
+  } catch (e) {
+    addLog('error', 'Erro ao salvar horarios');
+  }
+}
+
+async function resetSchedule() {
+  const def = ['06:00', '08:00', '10:00', '12:00', '14:00'];
+  try {
+    const r = await fetch(BASE + '/api/schedule-config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: true, times: def, timezone: 'America/Sao_Paulo' }),
+    });
+    const data = await r.json();
+    if (data.ok) {
+      addLog('system', 'Horarios restaurados para o padrao');
+      loadSchedule();
+    }
+  } catch (e) {
+    addLog('error', 'Erro ao restaurar horarios');
+  }
 }
 
 async function loadQueue() {
@@ -408,8 +504,8 @@ async function loadQueue() {
 function renderQueue(q) {
   const container = document.getElementById('videoGrid');
   const filtered = currentFilter === 'all' ? q.videos
-    : currentFilter === 'pending' ? q.videos.filter(v => !v.postedInstagram || !v.postedTikTok)
-    : currentFilter === 'done' ? q.videos.filter(v => v.postedInstagram && v.postedTikTok)
+    : currentFilter === 'pending' ? q.videos.filter(v => !v.postedInstagram || !v.postedTikTok || !v.postedFacebook || !v.postedKwai || !v.postedShorts)
+    : currentFilter === 'done' ? q.videos.filter(v => v.postedInstagram && v.postedTikTok && v.postedFacebook && v.postedKwai && v.postedShorts)
     : currentFilter === 'error' ? q.videos.filter(v => v.error)
     : q.videos;
 
@@ -421,15 +517,25 @@ function renderQueue(q) {
   container.innerHTML = filtered.map((v, i) => {
     const igClass = v.postedInstagram ? 'ig-done' : 'ig-pending';
     const ttClass = v.postedTikTok ? 'tt-done' : 'tt-pending';
+    const fbClass = v.postedFacebook ? 'fb-done' : 'fb-pending';
+    const kwClass = v.postedKwai ? 'kw-done' : 'kw-pending';
+    const shClass = v.postedShorts ? 'sh-done' : 'sh-pending';
     const igLabel = v.postedInstagram ? 'IG' : 'IG';
     const ttLabel = v.postedTikTok ? 'TT' : 'TT';
+    const fbLabel = v.postedFacebook ? 'FB' : 'FB';
+    const kwLabel = v.postedKwai ? 'KW' : 'KW';
+    const shLabel = v.postedShorts ? 'SH' : 'SH';
+    const thumbUrl = BASE + '/api/video?file=' + encodeURIComponent(v.filename);
     return `
       <div class="video-card">
-        <span class="v-num">${q.videos.indexOf(v) + 1}</span>
+        <div class="v-thumb"><video src="${thumbUrl}" preload="metadata" muted></video></div>
         <span class="v-name" title="${v.filename}">${v.filename}</span>
         <div class="v-platforms">
           <span class="v-platform ${igClass}">${igLabel}</span>
           <span class="v-platform ${ttClass}">${ttLabel}</span>
+          <span class="v-platform ${fbClass}">${fbLabel}</span>
+          <span class="v-platform ${kwClass}">${kwLabel}</span>
+          <span class="v-platform ${shClass}">${shLabel}</span>
         </div>
         ${v.error ? `<span class="v-err" title="${v.error}">${v.error}</span>` : ''}
       </div>

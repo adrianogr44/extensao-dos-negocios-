@@ -4,9 +4,27 @@ const path = require('path');
 const { spawn } = require('child_process');
 const cron = require('node-cron');
 
+try {
+  const envFile = path.join(__dirname, '..', '.env');
+  if (fs.existsSync(envFile)) {
+    const lines = fs.readFileSync(envFile, 'utf-8').split('\n');
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#') || !trimmed.includes('=')) continue;
+      const eqIdx = trimmed.indexOf('=');
+      const key = trimmed.substring(0, eqIdx).trim();
+      const val = trimmed.substring(eqIdx + 1).trim();
+      if (key && !process.env[key]) process.env[key] = val;
+    }
+  }
+} catch (e) {}
+
 const PORT = 3939;
 const QUEUE_FILE = path.join(__dirname, 'posts-queue.json');
 const HTML_FILE = path.join(__dirname, 'posting-studio.html');
+const SCHEDULE_CONFIG_FILE = path.join(__dirname, 'schedule-config.json');
+const ANALYTICS_DATA_FILE = path.join(__dirname, 'analytics-data.json');
+const REELS_VIDEO_DIR = process.env.VIDEOS_DIR || path.join(require('os').homedir(), 'Downloads', 'FabricaReels');
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -42,16 +60,22 @@ function getStats() {
   const total = q.videos.length;
   const igPosted = q.videos.filter(v => v.postedInstagram).length;
   const ttPosted = q.videos.filter(v => v.postedTikTok).length;
-  const bothPosted = q.videos.filter(v => v.postedInstagram && v.postedTikTok).length;
-  const pending = q.videos.filter(v => !v.postedInstagram || !v.postedTikTok).length;
+  const fbPosted = q.videos.filter(v => v.postedFacebook).length;
+  const kwPosted = q.videos.filter(v => v.postedKwai).length;
+  const shPosted = q.videos.filter(v => v.postedShorts).length;
+  const allPosted = q.videos.filter(v => v.postedInstagram && v.postedTikTok && v.postedFacebook && v.postedKwai && v.postedShorts).length;
+  const pending = q.videos.filter(v => !v.postedInstagram || !v.postedTikTok || !v.postedFacebook || !v.postedKwai || !v.postedShorts).length;
   const withErrors = q.videos.filter(v => v.error).length;
   const today = new Date().toISOString().slice(0, 10);
   const isToday = q.lastPostDate === today;
   return {
     total,
-    igPosted, ttPosted, bothPosted, pending, withErrors,
+    igPosted, ttPosted, fbPosted, kwPosted, shPosted, allPosted, pending, withErrors,
     dailyCount: q.dailyCount,
     dailyCountTikTok: q.dailyCountTikTok,
+    dailyCountFacebook: q.dailyCountFacebook || 0,
+    dailyCountKwai: q.dailyCountKwai || 0,
+    dailyCountShorts: q.dailyCountShorts || 0,
     dailyLimit: 5,
     isActive: isToday,
     lastPostDate: q.lastPostDate,
@@ -71,14 +95,7 @@ function broadcastLog(line) {
 }
 
 function launchChromeIfNeeded() {
-  const chromeLauncher = path.join(__dirname, 'launch-chrome.cmd');
-  if (fs.existsSync(chromeLauncher)) {
-    try {
-      require('net').createConnection(9222).on('connect', function() { this.destroy(); }).on('error', function() {
-        spawn('cmd', ['/c', 'start', '', chromeLauncher], { shell: true, detached: true }).unref();
-      }).end();
-    } catch {}
-  }
+  // Chrome lancado manualmente pelo usuario via botao no Studio
 }
 
 function runScript() {
@@ -116,52 +133,101 @@ function runScript() {
   return { ok: true };
 }
 
-const SCHEDULE_TIMES = ['06:00'];
-const SCHEDULE_CRON = '0 6 * * *';
-const SCHEDULE_VIDEOS = { '06:00': 5 };
 const TZ = 'America/Sao_Paulo';
 
-function getSchedule() {
-  const now = new Date();
-  const nowBR = new Date(now.toLocaleString('en-US', { timeZone: TZ }));
-  const nextRuns = SCHEDULE_TIMES.map(t => {
-    const [h, m] = t.split(':').map(Number);
-    const d = new Date(nowBR);
-    d.setHours(h, m, 0, 0);
-    if (d <= nowBR) d.setDate(d.getDate() + 1);
-    return { time: t, videos: SCHEDULE_VIDEOS[t], next: d.toLocaleString('pt-BR', { timeZone: TZ }) };
-  });
-  return { times: SCHEDULE_TIMES, nextRuns, timezone: TZ };
+function getDefaultScheduleConfig() {
+  return {
+    enabled: true,
+    times: ['06:00', '08:00', '10:00', '12:00', '14:00'],
+    timezone: TZ,
+  };
 }
 
+function loadScheduleConfig() {
+  try {
+    if (fs.existsSync(SCHEDULE_CONFIG_FILE)) {
+      const data = JSON.parse(fs.readFileSync(SCHEDULE_CONFIG_FILE, 'utf-8'));
+      if (data.times && data.times.length > 0) return data;
+    }
+  } catch {}
+  const def = getDefaultScheduleConfig();
+  saveScheduleConfig(def);
+  return def;
+}
+
+function saveScheduleConfig(config) {
+  fs.writeFileSync(SCHEDULE_CONFIG_FILE, JSON.stringify(config, null, 2));
+}
+
+function getNextRun(timeStr, tz) {
+  const now = new Date();
+  const nowLoc = new Date(now.toLocaleString('en-US', { timeZone: tz }));
+  const [h, m] = timeStr.split(':').map(Number);
+  const d = new Date(nowLoc);
+  d.setHours(h, m, 0, 0);
+  if (d <= nowLoc) d.setDate(d.getDate() + 1);
+  return d.toLocaleString('pt-BR', { timeZone: tz });
+}
+
+function getSchedule() {
+  const cfg = loadScheduleConfig();
+  const now = new Date();
+  const nowLoc = new Date(now.toLocaleString('en-US', { timeZone: cfg.timezone }));
+  const nextRuns = cfg.times.map(t => {
+    const [h, m] = t.split(':').map(Number);
+    const d = new Date(nowLoc);
+    d.setHours(h, m, 0, 0);
+    if (d <= nowLoc) d.setDate(d.getDate() + 1);
+    return { time: t, videos: 1, next: d.toLocaleString('pt-BR', { timeZone: cfg.timezone }) };
+  });
+  return { times: cfg.times, nextRuns, timezone: cfg.timezone, config: cfg };
+}
+
+let schedulerJobs = [];
+
 function startScheduler() {
-  cron.schedule(SCHEDULE_CRON, () => {
-    broadcastLog({ type: 'system', text: `=== Postagem agendada (06:00, 5 videos com 1h de intervalo) ===`, ts: new Date().toISOString() });
-    launchChromeIfNeeded();
-    setTimeout(() => {
-      const scriptPath = path.join(__dirname, 'postar-completo.js');
-      if (runningProcess) return;
-      logBuffer = [];
-      runningProcess = spawn('node', [scriptPath], { cwd: __dirname, shell: true });
-      runningProcess.stdout.on('data', (data) => {
-        const lines = data.toString().split('\n').filter(Boolean);
-        lines.forEach(line => broadcastLog({ type: 'stdout', text: line, ts: new Date().toISOString() }));
-      });
-      runningProcess.stderr.on('data', (data) => {
-        const lines = data.toString().split('\n').filter(Boolean);
-        lines.forEach(line => broadcastLog({ type: 'stderr', text: line, ts: new Date().toISOString() }));
-      });
-      runningProcess.on('close', (code) => {
-        broadcastLog({ type: 'system', text: `=== Processo encerrado (codigo: ${code}) ===`, ts: new Date().toISOString() });
-        runningProcess = null;
-      });
-      runningProcess.on('error', (err) => {
-        broadcastLog({ type: 'error', text: `Erro ao iniciar: ${err.message}`, ts: new Date().toISOString() });
-        runningProcess = null;
-      });
-    }, 5000);
-  }, { timezone: TZ });
-  console.log(`Agendado: ${SCHEDULE_TIMES.join(', ')} (${TZ})`);
+  schedulerJobs.forEach(j => j.stop());
+  schedulerJobs = [];
+
+  const cfg = loadScheduleConfig();
+  if (!cfg.enabled) {
+    console.log('Agendador desabilitado.');
+    return;
+  }
+
+  cfg.times.forEach(t => {
+    const [h, m] = t.split(':').map(Number);
+    const cronExpr = `${m} ${h} * * *`;
+    const job = cron.schedule(cronExpr, () => {
+      broadcastLog({ type: 'system', text: `=== Postagem agendada (${t}) ===`, ts: new Date().toISOString() });
+      launchChromeIfNeeded();
+      setTimeout(() => {
+        const scriptPath = path.join(__dirname, 'postar-completo.js');
+        if (runningProcess) return;
+        logBuffer = [];
+        runningProcess = spawn('node', [scriptPath, '1'], { cwd: __dirname, shell: true });
+        runningProcess.stdout.on('data', (data) => {
+          const lines = data.toString().split('\n').filter(Boolean);
+          lines.forEach(line => broadcastLog({ type: 'stdout', text: line, ts: new Date().toISOString() }));
+        });
+        runningProcess.stderr.on('data', (data) => {
+          const lines = data.toString().split('\n').filter(Boolean);
+          lines.forEach(line => broadcastLog({ type: 'stderr', text: line, ts: new Date().toISOString() }));
+        });
+        runningProcess.on('close', (code) => {
+          broadcastLog({ type: 'system', text: `=== Processo encerrado (codigo: ${code}) ===`, ts: new Date().toISOString() });
+          runningProcess = null;
+        });
+        runningProcess.on('error', (err) => {
+          broadcastLog({ type: 'error', text: `Erro ao iniciar: ${err.message}`, ts: new Date().toISOString() });
+          runningProcess = null;
+        });
+      }, 5000);
+    }, { timezone: cfg.timezone });
+    schedulerJobs.push(job);
+  });
+
+  console.log(`Agendado: ${cfg.times.join(', ')} (${cfg.timezone})`);
 }
 
 const server = http.createServer((req, res) => {
@@ -219,9 +285,12 @@ const server = http.createServer((req, res) => {
 
   if (pathname === '/api/queue/reset' && req.method === 'POST') {
     const q = getQueue();
-    q.videos.forEach(v => { v.postedInstagram = false; v.postedTikTok = false; v.error = null; });
+    q.videos.forEach(v => { v.postedInstagram = false; v.postedTikTok = false; v.postedFacebook = false; v.postedKwai = false; v.postedShorts = false; v.error = null; });
     q.dailyCount = 0;
     q.dailyCountTikTok = 0;
+    q.dailyCountFacebook = 0;
+    q.dailyCountKwai = 0;
+    q.dailyCountShorts = 0;
     q.lastPostDate = '';
     fs.writeFileSync(QUEUE_FILE, JSON.stringify(q, null, 2));
     return sendJson(res, { ok: true });
@@ -229,9 +298,12 @@ const server = http.createServer((req, res) => {
 
   if (pathname === '/api/queue/reset-posted' && req.method === 'POST') {
     const q = getQueue();
-    q.videos.forEach(v => { v.postedInstagram = false; v.postedTikTok = false; });
+    q.videos.forEach(v => { v.postedInstagram = false; v.postedTikTok = false; v.postedFacebook = false; v.postedKwai = false; v.postedShorts = false; });
     q.dailyCount = 0;
     q.dailyCountTikTok = 0;
+    q.dailyCountFacebook = 0;
+    q.dailyCountKwai = 0;
+    q.dailyCountShorts = 0;
     q.lastPostDate = '';
     fs.writeFileSync(QUEUE_FILE, JSON.stringify(q, null, 2));
     return sendJson(res, { ok: true });
@@ -248,6 +320,9 @@ const server = http.createServer((req, res) => {
     const q = getQueue();
     q.dailyCount = 0;
     q.dailyCountTikTok = 0;
+    q.dailyCountFacebook = 0;
+    q.dailyCountKwai = 0;
+    q.dailyCountShorts = 0;
     q.lastPostDate = '';
     fs.writeFileSync(QUEUE_FILE, JSON.stringify(q, null, 2));
     return sendJson(res, { ok: true });
@@ -264,6 +339,72 @@ const server = http.createServer((req, res) => {
 
   if (pathname === '/api/schedule') {
     return sendJson(res, getSchedule());
+  }
+
+  if (pathname === '/api/schedule-config' && req.method === 'GET') {
+    return sendJson(res, loadScheduleConfig());
+  }
+
+  if (pathname === '/api/schedule-config' && req.method === 'POST') {
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', () => {
+      try {
+        const cfg = JSON.parse(body);
+        cfg.times = cfg.times.filter(t => /^\d{2}:\d{2}$/.test(t));
+        saveScheduleConfig(cfg);
+        startScheduler();
+        return sendJson(res, { ok: true, config: cfg });
+      } catch (e) {
+        return sendJson(res, { ok: false, error: e.message }, 400);
+      }
+    });
+    return;
+  }
+
+  if (pathname === '/api/video' && req.method === 'GET') {
+    const filename = url.searchParams.get('file');
+    if (!filename) return sendJson(res, { error: 'file param required' }, 400);
+    const videoPath = path.join(REELS_VIDEO_DIR, filename);
+    if (!fs.existsSync(videoPath)) return sendJson(res, { error: 'not found' }, 404);
+
+    const stat = fs.statSync(videoPath);
+    const fileSize = stat.size;
+    const range = req.headers.range;
+
+    if (range) {
+      const parts = range.replace(/bytes=/, '').split('-');
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+      const chunksize = end - start + 1;
+      const stream = fs.createReadStream(videoPath, { start, end });
+      res.writeHead(206, {
+        'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+        'Accept-Ranges': 'bytes',
+        'Content-Length': chunksize,
+        'Content-Type': 'video/mp4',
+      });
+      stream.pipe(res);
+    } else {
+      res.writeHead(200, {
+        'Content-Length': fileSize,
+        'Content-Type': 'video/mp4',
+        'Accept-Ranges': 'bytes',
+      });
+      fs.createReadStream(videoPath).pipe(res);
+    }
+    return;
+  }
+
+  if (pathname === '/api/analytics' && req.method === 'GET') {
+    if (!fs.existsSync(ANALYTICS_DATA_FILE)) return sendJson(res, { scrapedAt: null, platforms: {} });
+    return serveFile(res, ANALYTICS_DATA_FILE);
+  }
+
+  if (pathname === '/api/analytics/refresh' && req.method === 'POST') {
+    const { scrapeAll } = require('./analytics.js');
+    scrapeAll().then(result => sendJson(res, result)).catch(err => sendJson(res, { ok: false, error: err.message }, 500));
+    return;
   }
 
   if (pathname.startsWith('/api/')) {

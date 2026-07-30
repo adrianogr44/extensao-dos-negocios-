@@ -1,0 +1,11 @@
+{
+  "enabled": true,
+  "times": [
+    "09:00",
+    "12:00",
+    "15:00",
+    "18:00",
+    "21:00"
+  ],
+  "timezone": "America/Sao_Paulo"
+}
