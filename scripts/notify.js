@@ -27,7 +27,7 @@ function formatResults(video, results) {
     const r = results[key];
     if (r === true) msg += `${emojis[key]} ${label}: ✅\n`;
     else if (r === false) msg += `${emojis[key]} ${label}: ⏭️ (ja postado)\n`;
-    else if (r) msg += `${emojis[key]} ${label}: ❌ ${r}\n`;
+    else if (r) msg += `${emojis[key]} ${label}: 🔴 ${r}\n`;
   }
   return msg;
 }

@@ -339,7 +339,7 @@ async function postToFacebookOnPage(page, videoPath) {
   for (let i = 0; i < 2; i++) {
     const btnNext = page.locator('[aria-label="Avançar"]:visible, [aria-label="Next"]:visible').first();
     if (await btnNext.isVisible({ timeout: 10000 }).catch(() => false)) {
-      await btnNext.click();
+      await btnNext.click({ force: true }).catch(() => btnNext.evaluate(el => el.click()));
       console.log(`  [Facebook] Avançar ${i + 1}`);
       await page.waitForTimeout(5000);
     }
@@ -356,7 +356,7 @@ async function postToFacebookOnPage(page, videoPath) {
 
   const btnPost = page.locator('[aria-label="Postar"]:visible, [aria-label="Publish"]:visible').first();
   if (await btnPost.isVisible({ timeout: 10000 }).catch(() => false)) {
-    await btnPost.click();
+    await btnPost.click({ force: true }).catch(() => btnPost.evaluate(el => el.click()));
     console.log('  [Facebook] Postar clicado!');
   }
 
