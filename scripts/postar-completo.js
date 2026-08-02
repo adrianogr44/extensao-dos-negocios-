@@ -133,18 +133,18 @@ async function postToInstagram(page, videoPath) {
   await page.goto('https://www.instagram.com', { waitUntil: 'networkidle', timeout: 60000 });
   await page.waitForTimeout(3000);
 
-  await page.locator('svg[aria-label="Novo post"], svg[aria-label="New post"]').first().click();
+  await page.locator('svg[aria-label="Novo post"], svg[aria-label="New post"]').first().click({ force: true }).catch(() => page.locator('svg[aria-label="Novo post"], svg[aria-label="New post"]').first().evaluate(el => el.click()));
   await page.waitForTimeout(2000);
 
   await page.locator('input[type="file"]').first().setInputFiles(videoPath);
   console.log('  [Instagram] Video enviado, aguardando processamento...');
   await page.waitForTimeout(15000);
 
-  await page.locator('div[role="button"]:has-text("Avançar"), div[role="button"]:has-text("Next")').first().click({ timeout: 30000 });
+  await page.locator('div[role="button"]:has-text("Avançar"), div[role="button"]:has-text("Next")').first().click({ timeout: 30000, force: true }).catch(() => page.locator('div[role="button"]:has-text("Avançar"), div[role="button"]:has-text("Next")').first().evaluate(el => el.click()));
   console.log('  [Instagram] Avancou para capa/edicao');
   await page.waitForTimeout(4000);
 
-  await page.locator('div[role="button"]:has-text("Avançar"), div[role="button"]:has-text("Next")').first().click({ timeout: 30000 });
+  await page.locator('div[role="button"]:has-text("Avançar"), div[role="button"]:has-text("Next")').first().click({ timeout: 30000, force: true }).catch(() => page.locator('div[role="button"]:has-text("Avançar"), div[role="button"]:has-text("Next")').first().evaluate(el => el.click()));
   console.log('  [Instagram] Avancou para legenda');
   await page.waitForTimeout(4000);
 
@@ -463,15 +463,36 @@ async function main(maxVideos) {
   console.log('=== Iniciando Postagem Completa (Instagram + TikTok + Facebook + Shorts) ===\n');
 
   const LOCK_FILE = path.join(__dirname, '.posting.lock');
-  if (fs.existsSync(LOCK_FILE)) {
-    const lockAge = Date.now() - fs.statSync(LOCK_FILE).mtimeMs;
-    if (lockAge < 1200000) {
-      console.log('Ja existe uma execucao em andamento (lock), pulando.');
-      return;
+
+  function tryAcquireLock() {
+    try {
+      const fd = fs.openSync(LOCK_FILE, 'wx');
+      fs.writeSync(fd, String(process.pid));
+      fs.closeSync(fd);
+      return true;
+    } catch (err) {
+      if (err.code !== 'EEXIST') return true;
+      const lockAge = Date.now() - fs.statSync(LOCK_FILE).mtimeMs;
+      if (lockAge >= 1200000) {
+        try { fs.unlinkSync(LOCK_FILE); } catch {}
+        try {
+          const fd = fs.openSync(LOCK_FILE, 'wx');
+          fs.writeSync(fd, String(process.pid));
+          fs.closeSync(fd);
+          return true;
+        } catch (err2) {
+          if (err2.code === 'EEXIST') return false;
+          return true;
+        }
+      }
+      return false;
     }
-    fs.unlinkSync(LOCK_FILE);
   }
-  fs.writeFileSync(LOCK_FILE, String(process.pid));
+
+  if (!tryAcquireLock()) {
+    console.log('Ja existe uma execucao em andamento (lock), pulando.');
+    return;
+  }
 
   const queue = loadQueue();
   if (queue.dailyCountShorts === undefined) queue.dailyCountShorts = 0;
@@ -647,8 +668,7 @@ async function main(maxVideos) {
     }
   }
 
-  await page.close();
-  await browser.close();
+  await page.close().catch(() => {});
 
   const totalIG = queue.videos.filter(v => v.postedInstagram).length;
   const totalTT = queue.videos.filter(v => v.postedTikTok).length;

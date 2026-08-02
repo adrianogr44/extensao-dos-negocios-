@@ -25,6 +25,7 @@ const HTML_FILE = path.join(__dirname, 'posting-studio.html');
 const SCHEDULE_CONFIG_FILE = path.join(__dirname, 'schedule-config.json');
 const ANALYTICS_DATA_FILE = path.join(__dirname, 'analytics-data.json');
 const REELS_VIDEO_DIR = process.env.VIDEOS_DIR || path.join(require('os').homedir(), 'Downloads', 'FabricaReels');
+const STUDIO_SCHEDULER_DISABLED = process.env.STUDIO_SCHEDULER_DISABLED === 'true';
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -188,6 +189,11 @@ let schedulerJobs = [];
 function startScheduler() {
   schedulerJobs.forEach(j => j.stop());
   schedulerJobs = [];
+
+  if (STUDIO_SCHEDULER_DISABLED) {
+    console.log('Scheduler do Studio desabilitado (STUDIO_SCHEDULER_DISABLED=true). Usar postar-agendado.js');
+    return;
+  }
 
   const cfg = loadScheduleConfig();
   if (!cfg.enabled) {
