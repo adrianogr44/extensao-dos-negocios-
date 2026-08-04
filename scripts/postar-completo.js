@@ -175,7 +175,7 @@ async function postToInstagram(page, videoPath) {
     }
   } catch {
     await page.waitForTimeout(10000);
-    console.log('  [Instagram] Continuando apos compartilhar');
+    throw new Error('Instagram: confirmação "Seu reel foi compartilhado" não apareceu. Video NAO confirmado como postado.');
   }
 
   await page.waitForTimeout(2000);
@@ -358,10 +358,21 @@ async function postToFacebookOnPage(page, videoPath) {
   if (await btnPost.isVisible({ timeout: 10000 }).catch(() => false)) {
     await btnPost.click({ force: true }).catch(() => btnPost.evaluate(el => el.click()));
     console.log('  [Facebook] Postar clicado!');
+  } else {
+    throw new Error('Facebook: botao Postar nao encontrado. Video NAO postado.');
   }
 
   console.log('  [Facebook] Aguardando publicacao (30s)...');
   await page.waitForTimeout(30000);
+
+  const dialogFechado = await page.evaluate(() => {
+    const txt = document.body.innerText;
+    return txt.includes('Criar reel') || txt.includes('Publicado com sucesso');
+  }).catch(() => false);
+
+  if (!dialogFechado) {
+    console.log('  [Facebook] Aviso: nao foi possivel confirmar o dialogo fechado');
+  }
 
   try { await page.goto(origUrl, { waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => {}); } catch {}
 
@@ -524,20 +535,21 @@ async function main(maxVideos) {
 
   const maxVideosAgendado = maxVideos || Math.max(remainingIG, remainingTT, remainingFB, remainingSH);
 
+  let selIG = 0, selTT = 0, selFB = 0, selSH = 0;
   for (const v of pending) {
-    const precisaIG = !v.postedInstagram && queue.dailyCount < DAILY_LIMIT_INSTAGRAM;
-    const precisaTT = !v.postedTikTok && queue.dailyCountTikTok < DAILY_LIMIT_TIKTOK;
-    const precisaFB = !v.postedFacebook && queue.dailyCountFacebook < DAILY_LIMIT_FACEBOOK;
-    const precisaSH = !v.postedShorts && (queue.dailyCountShorts || 0) < DAILY_LIMIT_SHORTS;
+    const precisaIG = !v.postedInstagram && selIG < DAILY_LIMIT_INSTAGRAM;
+    const precisaTT = !v.postedTikTok && selTT < DAILY_LIMIT_TIKTOK;
+    const precisaFB = !v.postedFacebook && selFB < DAILY_LIMIT_FACEBOOK;
+    const precisaSH = !v.postedShorts && selSH < DAILY_LIMIT_SHORTS;
     if (precisaIG || precisaTT || precisaFB || precisaSH) {
       toPost.push(v);
-      if (precisaIG) queue.dailyCount++;
-      if (precisaTT) queue.dailyCountTikTok++;
-      if (precisaFB) queue.dailyCountFacebook++;
-      if (precisaSH) queue.dailyCountShorts++;
+      if (precisaIG) selIG++;
+      if (precisaTT) selTT++;
+      if (precisaFB) selFB++;
+      if (precisaSH) selSH++;
     }
     if (toPost.length >= maxVideosAgendado) break;
-    if (queue.dailyCount >= DAILY_LIMIT_INSTAGRAM && queue.dailyCountTikTok >= DAILY_LIMIT_TIKTOK && queue.dailyCountFacebook >= DAILY_LIMIT_FACEBOOK && queue.dailyCountShorts >= DAILY_LIMIT_SHORTS) break;
+    if (selIG >= DAILY_LIMIT_INSTAGRAM && selTT >= DAILY_LIMIT_TIKTOK && selFB >= DAILY_LIMIT_FACEBOOK && selSH >= DAILY_LIMIT_SHORTS) break;
   }
 
   if (toPost.length === 0) {
@@ -577,6 +589,7 @@ async function main(maxVideos) {
         await postToInstagram(igPage, video.path);
         video.postedInstagram = true;
         video.instagramDate = new Date().toISOString();
+        queue.dailyCount++;
         await igPage.close();
         results.instagram = true;
       } catch (err) {
@@ -596,6 +609,7 @@ async function main(maxVideos) {
         await postToTikTok(page, video.path);
         video.postedTikTok = true;
         video.tiktokDate = new Date().toISOString();
+        queue.dailyCountTikTok++;
         results.tiktok = true;
       } catch (err) {
         console.error(`  [TikTok] ERRO: ${err.message}`);
@@ -614,6 +628,7 @@ async function main(maxVideos) {
         await postToFacebook(browser, video.path);
         video.postedFacebook = true;
         video.facebookDate = new Date().toISOString();
+        queue.dailyCountFacebook++;
         results.facebook = true;
       } catch (err) {
         console.error(`  [Facebook] ERRO: ${err.message}`);
@@ -633,6 +648,7 @@ async function main(maxVideos) {
         await postToShorts(shortsPage, video.path);
         video.postedShorts = true;
         video.shortsDate = new Date().toISOString();
+        queue.dailyCountShorts++;
         await shortsPage.close();
         results.shorts = true;
       } catch (err) {
