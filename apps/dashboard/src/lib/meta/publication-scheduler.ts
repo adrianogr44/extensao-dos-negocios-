@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import { notifyPublicationBatch, type PublicationNotifyItem } from '@/lib/telegram';
 
 export interface PublicationSchedulerResult {
   published: number;
@@ -19,6 +20,8 @@ export async function processScheduledPublications(): Promise<PublicationSchedul
     skipped: 0,
     errors: [],
   };
+
+  const notifyItems: PublicationNotifyItem[] = [];
 
   try {
     console.log(`[PublicationScheduler] Starting scheduled publications check at ${now.toISOString()}`);
@@ -61,6 +64,13 @@ export async function processScheduledPublications(): Promise<PublicationSchedul
 
         if (publishResponse.ok) {
           result.published++;
+          for (const platform of publication.platforms) {
+            notifyItems.push({
+              platform,
+              scheduledFor: publication.scheduledFor,
+              success: true,
+            });
+          }
           console.log(`[PublicationScheduler] Successfully published ${publication.id}`);
         } else {
           result.failed++;
@@ -69,6 +79,14 @@ export async function processScheduledPublications(): Promise<PublicationSchedul
             publicationId: publication.id,
             error: error.error || 'Unknown error',
           });
+          for (const platform of publication.platforms) {
+            notifyItems.push({
+              platform,
+              scheduledFor: publication.scheduledFor,
+              success: false,
+              error: error.error || 'Unknown error',
+            });
+          }
           console.error(
             `[PublicationScheduler] Failed to publish ${publication.id}: ${error.error}`,
           );
@@ -80,6 +98,14 @@ export async function processScheduledPublications(): Promise<PublicationSchedul
           publicationId: publication.id,
           error: errorMsg,
         });
+        for (const platform of publication.platforms) {
+          notifyItems.push({
+            platform,
+            scheduledFor: publication.scheduledFor,
+            success: false,
+            error: errorMsg,
+          });
+        }
         console.error(`[PublicationScheduler] Error publishing ${publication.id}:`, error);
       }
     }
@@ -87,6 +113,9 @@ export async function processScheduledPublications(): Promise<PublicationSchedul
     console.log(
       `[PublicationScheduler] Completed: ${result.published} published, ${result.failed} failed`,
     );
+
+    // Notificar via Telegram
+    await notifyPublicationBatch(notifyItems);
 
     return result;
   } catch (error) {

@@ -7,6 +7,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { nanoid } from 'nanoid'
+import { notifyPublicationBatch, type PublicationNotifyItem } from '@/lib/telegram'
 
 const INTERVAL_MS = 60_000
 
@@ -52,15 +53,25 @@ async function processDuePublications() {
 
     if (publications.length === 0) return
 
+    const notifyItems: PublicationNotifyItem[] = []
+
     console.log(`[YT Publisher] ${publications.length} publicação(ões) para processar`)
 
     for (const pub of publications) {
       try {
         await publishSingle(pub)
+        notifyItems.push({ platform: 'YOUTUBE', scheduledFor: pub.scheduledFor, success: true })
       } catch (err) {
         console.error(`[YT Publisher] Falha na publicação ${pub.id}:`, err)
 
         const errorMessage = err instanceof Error ? err.message : 'Erro desconhecido'
+
+        notifyItems.push({
+          platform: 'YOUTUBE',
+          scheduledFor: pub.scheduledFor,
+          success: false,
+          error: errorMessage,
+        })
 
         if (err instanceof SessionExpiredError) {
           if (pub.youtubeAccount?.youtubeSession) {
@@ -90,6 +101,8 @@ async function processDuePublications() {
         })
       }
     }
+
+    await notifyPublicationBatch(notifyItems)
   } catch (err) {
     console.error('[YT Publisher] Erro no worker:', err)
   } finally {
