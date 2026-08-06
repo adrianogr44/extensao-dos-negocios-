@@ -16,6 +16,7 @@ export interface MetaTokenResponse {
 export interface MetaPageInfo {
   id: string;
   name: string;
+  access_token?: string;
   picture?: {
     data?: {
       height: number;
@@ -42,7 +43,7 @@ export interface MetaPageListResponse {
 
 // Publication Types
 export type PublicationStatus = 'DRAFT' | 'SCHEDULED' | 'PUBLISHED' | 'FAILED';
-export type PublicationPlatform = 'FACEBOOK' | 'INSTAGRAM';
+export type PublicationPlatform = 'FACEBOOK' | 'INSTAGRAM' | 'TIKTOK' | 'YOUTUBE';
 
 export interface ScheduleFormData {
   description: string;
@@ -50,6 +51,9 @@ export interface ScheduleFormData {
   platforms: PublicationPlatform[];
   scheduledFor: string;
   metaAccountId?: string;
+  tiktokAccountId?: string;
+  youtubeAccountId?: string;
+  method?: 'API' | 'SCRAPE';
   saveAsTemplate?: boolean;
   templateName?: string;
 }
@@ -79,6 +83,24 @@ export interface MetaAccountDTO {
   id: string;
   pageName: string;
   pageUsername?: string;
+  profilePictureUrl?: string;
+  isActive: boolean;
+  connectedAt: Date;
+}
+
+export interface TikTokAccountDTO {
+  id: string;
+  username: string;
+  displayName?: string;
+  profilePictureUrl?: string;
+  isActive: boolean;
+  connectedAt: Date;
+}
+
+export interface YouTubeAccountDTO {
+  id: string;
+  channelName: string;
+  channelId?: string;
   profilePictureUrl?: string;
   isActive: boolean;
   connectedAt: Date;

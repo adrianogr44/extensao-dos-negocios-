@@ -67,5 +67,5 @@ function deriveKey(masterKey: string): Buffer {
  * Valida a chave de encriptação
  */
 export function validateEncryptionKey(key: string): boolean {
-  return key && key.length >= 16;
+  return !!key && key.length >= 16;
 }

@@ -1,7 +1,8 @@
 import { Worker } from 'bullmq'
 import { prisma } from './prisma'
 import { uploadFile, getFileUrl, downloadFile } from './minio'
-import { buildOverlayFilter, renderVideo, renderVideoWithProgress } from './ffmpeg'
+import { buildOverlayFilter, renderVideo, renderVideoWithProgress, getVideoFps } from './ffmpeg'
+import { resolveOverlayForVideo } from './overlay'
 import { nanoid } from 'nanoid'
 import { execa } from 'execa'
 import { readFile, writeFile, unlink, mkdtemp } from 'node:fs/promises'
@@ -11,6 +12,13 @@ import { tmpdir } from 'node:os'
 const connection = {
   host: process.env.REDIS_URL ? new URL(process.env.REDIS_URL).hostname : 'localhost',
   port: process.env.REDIS_URL ? Number(new URL(process.env.REDIS_URL).port) || 6379 : 6379,
+}
+
+// Deterministic: quantos frames micro-cortar no início (1-2) por vídeo.
+function dropFrameCount(id: string) {
+  let h = 0
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0
+  return (h % 2) + 1
 }
 
 export function startRenderWorker() {
@@ -28,8 +36,12 @@ export function startRenderWorker() {
     const editConfig = video.editConfigs
     if (!editConfig) throw new Error(`No edit config for video ${videoId}`)
 
-    // Get overlay
-    const overlay = await prisma.overlay.findFirst({ orderBy: { createdAt: 'desc' } })
+    // Get overlay (hierarquia: editor > perfil > nicho > global)
+    const overlay = await resolveOverlayForVideo({
+      nicheId: video.nicheId,
+      profileId: video.profileId,
+      editConfigs: video.editConfigs,
+    })
     if (!overlay) throw new Error('No overlay configured')
 
     // Update status
@@ -69,7 +81,8 @@ export function startRenderWorker() {
 
       // Build FFmpeg args
       console.log(`[render-worker] Building filter for video ${videoId}`)
-      const args = buildOverlayFilter({
+      const inputFps = editConfig.zoomBreathing ? await getVideoFps(inputPath) : 0
+      const args = await buildOverlayFilter({
         inputVideo: inputPath,
         inputOverlay: overlayPath,
         outputPath,
@@ -78,6 +91,7 @@ export function startRenderWorker() {
           posY: editConfig.posY,
           scale: editConfig.scale,
           zoom: editConfig.zoom,
+          rotation: editConfig.rotation ?? 0,
         },
         overlay: {
           posX: editConfig.overlayX,
@@ -87,6 +101,8 @@ export function startRenderWorker() {
           opacity: editConfig.opacity,
         },
         volume: editConfig.volume,
+        overlayBehind: editConfig.overlayBehind ?? false,
+        videoDurationMs: video.durationMs,
         cropTop: editConfig.cropTop || 0,
         cropBottom: editConfig.cropBottom || 0,
         bgColor: editConfig.bgColor || '#000000',
@@ -94,6 +110,17 @@ export function startRenderWorker() {
         cropOpacity: editConfig.cropOpacity ?? 1,
         speed: editConfig.speed ?? 1,
         mirror: editConfig.mirror ?? false,
+        eq: editConfig.eqEnabled
+          ? {
+              brightness: editConfig.eqBrightness ?? 1,
+              contrast: editConfig.eqContrast ?? 1,
+              saturation: editConfig.eqSaturation ?? 1,
+            }
+          : undefined,
+        grain: editConfig.grain ? { amount: editConfig.grainAmount ?? 0 } : undefined,
+        frameDrop: editConfig.frameDrop ? { frames: dropFrameCount(videoId) } : undefined,
+        zoomBreathing: editConfig.zoomBreathing ? { amount: editConfig.zoomBreathAmount ?? 0 } : undefined,
+        inputFps: inputFps,
         texts: (editConfig.texts as Array<{ content: string; x: number; y: number; fontSize: number; color: string }>) || undefined,
       })
 

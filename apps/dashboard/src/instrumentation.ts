@@ -5,7 +5,19 @@ export async function register() {
     console.log('✅ Render worker iniciado')
 
     const { startPublicationScheduler } = await import('./lib/meta/publication-scheduler')
-    startPublicationScheduler(60000) // Executar a cada 60 segundos
-    console.log('✅ Publication scheduler iniciado')
+    startPublicationScheduler(60000)
+    console.log('✅ Publication scheduler (API) iniciado')
+
+    const { startFacebookScrapeWorker } = await import('./lib/facebook-publisher/worker')
+    startFacebookScrapeWorker()
+    console.log('✅ Facebook scrape publisher worker iniciado')
+
+    const { startTikTokScrapeWorker } = await import('./lib/tiktok-publisher/worker')
+    startTikTokScrapeWorker()
+    console.log('✅ TikTok scrape publisher worker iniciado')
+
+    const { startYouTubeScrapeWorker } = await import('./lib/youtube-publisher/worker')
+    startYouTubeScrapeWorker()
+    console.log('✅ YouTube scrape publisher worker iniciado')
   }
 }

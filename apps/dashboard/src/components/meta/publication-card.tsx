@@ -75,7 +75,7 @@ export function PublicationCard({
           <div className="flex gap-2">
             {publication.platforms.map((p) => (
               <span key={p} className="px-2 py-1 rounded bg-gray-100 dark:bg-gray-700 text-xs">
-                {p === 'FACEBOOK' ? '🔵 FB' : '📷 IG'}
+                {p === 'FACEBOOK' ? '🔵 FB' : p === 'INSTAGRAM' ? '📷 IG' : p === 'TIKTOK' ? '🎵 TT' : '📺 YT'}
               </span>
             ))}
           </div>

@@ -1,13 +1,15 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { Calendar, Clock, Loader2 } from 'lucide-react';
-import { ScheduleFormData, MetaAccountDTO, TemplateDTO, PublicationPlatform } from '@/lib/meta/types';
+import { ScheduleFormData, MetaAccountDTO, TemplateDTO, PublicationPlatform, TikTokAccountDTO, YouTubeAccountDTO } from '@/lib/meta/types';
 import { TagInput } from './tag-input';
 
 interface ScheduleFormProps {
   videoId: string;
   videoTitle: string;
   accounts: MetaAccountDTO[];
+  tiktokAccounts: TikTokAccountDTO[];
+  youtubeAccounts: YouTubeAccountDTO[];
   templates: TemplateDTO[];
   onSubmit: (data: ScheduleFormData) => Promise<void>;
   onCancel: () => void;
@@ -17,6 +19,8 @@ export function ScheduleForm({
   videoId,
   videoTitle,
   accounts,
+  tiktokAccounts,
+  youtubeAccounts,
   templates,
   onSubmit,
   onCancel,
@@ -30,9 +34,12 @@ export function ScheduleForm({
   }, []);
 
   const [metaAccountId, setMetaAccountId] = useState<string>(accounts[0]?.id || '');
+  const [tiktokAccountId, setTiktokAccountId] = useState<string>(tiktokAccounts[0]?.id || '');
+  const [youtubeAccountId, setYoutubeAccountId] = useState<string>(youtubeAccounts[0]?.id || '');
   const [description, setDescription] = useState('');
   const [hashtags, setHashtags] = useState<string[]>([]);
   const [platforms, setPlatforms] = useState<PublicationPlatform[]>(['FACEBOOK', 'INSTAGRAM']);
+  const [method, setMethod] = useState<'API' | 'SCRAPE'>('SCRAPE');
   const [scheduledFor, setScheduledFor] = useState('');
   const [saveAsTemplate, setSaveAsTemplate] = useState(false);
   const [templateName, setTemplateName] = useState('');
@@ -41,8 +48,22 @@ export function ScheduleForm({
     e.preventDefault();
     setError(null);
 
-    if (!metaAccountId) {
-      setError('Selecione uma conta Meta');
+    const needsMeta = platforms.some(p => p === 'FACEBOOK' || p === 'INSTAGRAM');
+    const needsTikTok = platforms.includes('TIKTOK');
+    const needsYouTube = platforms.includes('YOUTUBE');
+
+    if (needsMeta && !metaAccountId) {
+      setError('Selecione uma conta Meta (Facebook/Instagram)');
+      return;
+    }
+
+    if (needsTikTok && !tiktokAccountId) {
+      setError('Selecione uma conta TikTok');
+      return;
+    }
+
+    if (needsYouTube && !youtubeAccountId) {
+      setError('Selecione uma conta YouTube');
       return;
     }
 
@@ -71,7 +92,10 @@ export function ScheduleForm({
         hashtags,
         platforms,
         scheduledFor: isoDateTime,
-        metaAccountId,
+        metaAccountId: needsMeta ? metaAccountId : undefined,
+        tiktokAccountId: needsTikTok ? tiktokAccountId : undefined,
+        youtubeAccountId: needsYouTube ? youtubeAccountId : undefined,
+        method,
         saveAsTemplate,
         templateName: templateName || undefined,
       });
@@ -172,6 +196,50 @@ export function ScheduleForm({
               )}
             </div>
 
+            {/* TikTok Account Selection */}
+            {tiktokAccounts.length > 0 && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Conta TikTok *
+                </label>
+                <select
+                  value={tiktokAccountId}
+                  onChange={(e) => setTiktokAccountId(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-800 dark:text-white text-sm"
+                >
+                  <option value="">Selecionar conta TikTok...</option>
+                  {tiktokAccounts.map((acc) => (
+                    <option key={acc.id} value={acc.id}>
+                      🎵 {acc.username}
+                      {acc.displayName ? ` (${acc.displayName})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* YouTube Account Selection */}
+            {youtubeAccounts.length > 0 && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Conta YouTube *
+                </label>
+                <select
+                  value={youtubeAccountId}
+                  onChange={(e) => setYoutubeAccountId(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-800 dark:text-white text-sm"
+                >
+                  <option value="">Selecionar conta YouTube...</option>
+                  {youtubeAccounts.map((acc) => (
+                    <option key={acc.id} value={acc.id}>
+                      📺 {acc.channelName}
+                      {acc.channelId ? ` (${acc.channelId})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             {/* Platforms */}
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -208,6 +276,36 @@ export function ScheduleForm({
                   />
                   <span className="text-sm">Instagram</span>
                 </label>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={platforms.includes('TIKTOK')}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setPlatforms([...platforms, 'TIKTOK']);
+                      } else {
+                        setPlatforms(platforms.filter((p) => p !== 'TIKTOK'));
+                      }
+                    }}
+                    className="w-4 h-4 rounded"
+                  />
+                  <span className="text-sm">TikTok</span>
+                </label>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={platforms.includes('YOUTUBE')}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setPlatforms([...platforms, 'YOUTUBE']);
+                      } else {
+                        setPlatforms(platforms.filter((p) => p !== 'YOUTUBE'));
+                      }
+                    }}
+                    className="w-4 h-4 rounded"
+                  />
+                  <span className="text-sm">YouTube</span>
+                </label>
               </div>
             </div>
 
@@ -237,6 +335,42 @@ export function ScheduleForm({
 
             {/* Hashtags */}
             <TagInput value={hashtags} onChange={setHashtags} maxTags={30} />
+
+            {/* Method */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Método de publicação
+              </label>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="method"
+                    value="API"
+                    checked={method === 'API'}
+                    onChange={() => setMethod('API')}
+                    className="w-4 h-4"
+                  />
+                  <span className="text-sm">API oficial (Meta)</span>
+                </label>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="method"
+                    value="SCRAPE"
+                    checked={method === 'SCRAPE'}
+                    onChange={() => setMethod('SCRAPE')}
+                    className="w-4 h-4"
+                  />
+                  <span className="text-sm">Scraping (navegador)</span>
+                </label>
+              </div>
+              {method === 'SCRAPE' && (
+                <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                  Requer sessão ativa do Facebook via navegador
+                </p>
+              )}
+            </div>
 
             {/* Date & Time */}
             <div>

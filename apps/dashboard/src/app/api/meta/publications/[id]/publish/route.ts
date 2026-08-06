@@ -24,6 +24,14 @@ export async function POST(
       return Response.json({ error: 'Publication not found' }, { status: 404 });
     }
 
+    // Este endpoint é apenas para o método API da Meta
+    if (publication.method !== 'API' || !publication.metaAccount) {
+      return Response.json(
+        { error: 'Esta publicação não usa a API da Meta (método SCRAPE ou conta não-Meta)' },
+        { status: 400 },
+      );
+    }
+
     // Validar status
     if (!['DRAFT', 'SCHEDULED'].includes(publication.status)) {
       return Response.json(

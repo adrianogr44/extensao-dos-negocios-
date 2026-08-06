@@ -16,6 +16,7 @@ interface ControlsPanelProps {
     overlayCropTop: number
     overlayCropBottom: number
     opacity: number
+    overlayBehind: boolean
     cropTop: number
     cropBottom: number
     bgColor: string
@@ -23,6 +24,15 @@ interface ControlsPanelProps {
     cropOpacity: number
     speed: number
     mirror: boolean
+    eqEnabled: boolean
+    eqBrightness: number
+    eqContrast: number
+    eqSaturation: number
+    grain: boolean
+    grainAmount: number
+    frameDrop: boolean
+    zoomBreathing: boolean
+    zoomBreathAmount: number
     texts: Array<{ content: string; x: number; y: number; fontSize: number; color: string }>
   }
   onChange: (key: string, value: number | string | boolean) => void
@@ -105,6 +115,52 @@ export function ControlsPanel({ config, onChange, onSave, onReplicate, onReplica
             className="accent-primary" />
           Espelhar vídeo (mirror)
         </label>
+
+        <label className="flex items-center gap-2 text-xs text-zinc-500 cursor-pointer">
+          <input type="checkbox" checked={config.eqEnabled}
+            onChange={e => onChange('eqEnabled', e.target.checked)}
+            className="accent-primary" />
+          Ajuste de cor (eq)
+        </label>
+        {config.eqEnabled && (
+          <div className="space-y-2 rounded border border-zinc-700 p-2">
+            <Slider label="Brilho" min={0.9} max={1.1} step={0.01} value={config.eqBrightness}
+              onChange={v => onChange('eqBrightness', v)} />
+            <Slider label="Contraste" min={0.9} max={1.1} step={0.01} value={config.eqContrast}
+              onChange={v => onChange('eqContrast', v)} />
+            <Slider label="Saturação" min={0.9} max={1.1} step={0.01} value={config.eqSaturation}
+              onChange={v => onChange('eqSaturation', v)} />
+          </div>
+        )}
+
+        <label className="flex items-center gap-2 text-xs text-zinc-500 cursor-pointer">
+          <input type="checkbox" checked={config.grain}
+            onChange={e => onChange('grain', e.target.checked)}
+            className="accent-primary" />
+          Grain / ruído leve
+        </label>
+        {config.grain && (
+          <Slider label="Intensidade do ruído" min={0} max={0.3} step={0.01} value={config.grainAmount}
+            onChange={v => onChange('grainAmount', v)} />
+        )}
+
+        <label className="flex items-center gap-2 text-xs text-zinc-500 cursor-pointer">
+          <input type="checkbox" checked={config.frameDrop}
+            onChange={e => onChange('frameDrop', e.target.checked)}
+            className="accent-primary" />
+          Micro-corte de frames
+        </label>
+
+        <label className="flex items-center gap-2 text-xs text-zinc-500 cursor-pointer">
+          <input type="checkbox" checked={config.zoomBreathing}
+            onChange={e => onChange('zoomBreathing', e.target.checked)}
+            className="accent-primary" />
+          Zoom breathing leve
+        </label>
+        {config.zoomBreathing && (
+          <Slider label="Intensidade do zoom" min={0} max={0.05} step={0.005} value={config.zoomBreathAmount}
+            onChange={v => onChange('zoomBreathAmount', v)} />
+        )}
       </Section>
 
       <hr className="border-zinc-800" />
@@ -119,7 +175,7 @@ export function ControlsPanel({ config, onChange, onSave, onReplicate, onReplica
           onChange={v => onChange('posX', v)} />
         <Slider label="Posição Y" min={-2500} max={2500} step={1} value={config.posY}
           onChange={v => onChange('posY', v)} />
-        <Slider label="Rotação" min={-180} max={180} step={1} value={config.rotation}
+        <Slider label="Rotação (sutil)" min={-6} max={6} step={0.1} value={config.rotation}
           onChange={v => onChange('rotation', v)} />
       </Section>
 
@@ -135,6 +191,12 @@ export function ControlsPanel({ config, onChange, onSave, onReplicate, onReplica
 
       {/* ── Overlay ── */}
       <Section title="Overlay">
+        <label className="flex items-center gap-2 text-xs text-zinc-500 cursor-pointer">
+          <input type="checkbox" checked={config.overlayBehind}
+            onChange={e => onChange('overlayBehind', e.target.checked)}
+            className="accent-primary" />
+          Overlay atrás do vídeo
+        </label>
         <Slider label="Posição X" min={-1500} max={1500} step={1} value={config.overlayX}
           onChange={v => onChange('overlayX', v)} />
         <Slider label="Posição Y" min={-2500} max={2500} step={1} value={config.overlayY}

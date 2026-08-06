@@ -60,10 +60,19 @@ export default function BatchSchedulePage() {
   const [scheduledFor, setScheduledFor] = useState('');
   const [intervalHours, setIntervalHours] = useState(24);
   const [platforms, setPlatforms] = useState<string[]>(['FACEBOOK', 'INSTAGRAM']);
+  const [method, setMethod] = useState<'API' | 'SCRAPE'>('SCRAPE');
 
   // Step 4: Meta Account Selection
   const [metaAccounts, setMetaAccounts] = useState<any[]>([]);
   const [selectedMetaAccountId, setSelectedMetaAccountId] = useState<string>("");
+
+  // Step 4: TikTok Account Selection
+  const [tiktokAccounts, setTiktokAccounts] = useState<any[]>([]);
+  const [selectedTiktokAccountId, setSelectedTiktokAccountId] = useState<string>("");
+
+  // Step 4: YouTube Account Selection
+  const [youtubeAccounts, setYoutubeAccounts] = useState<any[]>([]);
+  const [selectedYoutubeAccountId, setSelectedYoutubeAccountId] = useState<string>("");
 
   // Load meta accounts on mount
   useEffect(() => {
@@ -80,6 +89,42 @@ export default function BatchSchedulePage() {
       }
     };
     loadMetaAccounts();
+  }, []);
+
+  // Load TikTok accounts on mount
+  useEffect(() => {
+    const loadTikTokAccounts = async () => {
+      try {
+        const response = await fetch("/api/tiktok/accounts");
+        const result = await response.json();
+        const accounts = result.data || [];
+        setTiktokAccounts(accounts);
+        if (accounts.length > 0) {
+          setSelectedTiktokAccountId(accounts[0].id);
+        }
+      } catch (err) {
+        console.error("Erro ao carregar contas TikTok", err);
+      }
+    };
+    loadTikTokAccounts();
+  }, []);
+
+  // Load YouTube accounts on mount
+  useEffect(() => {
+    const loadYouTubeAccounts = async () => {
+      try {
+        const response = await fetch("/api/youtube/accounts");
+        const result = await response.json();
+        const accounts = result.data || [];
+        setYoutubeAccounts(accounts);
+        if (accounts.length > 0) {
+          setSelectedYoutubeAccountId(accounts[0].id);
+        }
+      } catch (err) {
+        console.error("Erro ao carregar contas YouTube", err);
+      }
+    };
+    loadYouTubeAccounts();
   }, []);
 
   // Load niches on mount
@@ -217,6 +262,22 @@ export default function BatchSchedulePage() {
 
       const videoIds = Array.from(selectedVideos);
       const metaAccountId = selectedMetaAccountId;
+      const tiktokAccountId = selectedTiktokAccountId;
+      const youtubeAccountId = selectedYoutubeAccountId;
+
+      const requiresMeta = platforms.some(p => p === 'FACEBOOK' || p === 'INSTAGRAM');
+      const requiresTikTok = platforms.includes('TIKTOK');
+      const requiresYouTube = platforms.includes('YOUTUBE');
+
+      if (requiresMeta && !metaAccountId) {
+        throw new Error('Selecione uma conta Meta (Facebook/Instagram)');
+      }
+      if (requiresTikTok && !tiktokAccountId) {
+        throw new Error('Selecione uma conta TikTok');
+      }
+      if (requiresYouTube && !youtubeAccountId) {
+        throw new Error('Selecione uma conta YouTube');
+      }
 
       const scheduleTimes = videoIds.map((_, index) => {
         const time = new Date(scheduledFor);
@@ -230,10 +291,13 @@ export default function BatchSchedulePage() {
         body: JSON.stringify({
           videoIds,
           metaAccountId,
+          tiktokAccountId,
+          youtubeAccountId,
           description,
           hashtags,
           platforms,
           scheduleTimes,
+          method,
         }),
       });
 
@@ -533,6 +597,56 @@ export default function BatchSchedulePage() {
                 </p>
               )}
             </div>
+
+              {/* TikTok Account Selection */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Conta TikTok *
+                </label>
+                <select
+                  value={selectedTiktokAccountId}
+                  onChange={(e) => setSelectedTiktokAccountId(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
+                >
+                  <option value="">Selecionar conta TikTok...</option>
+                  {tiktokAccounts.map((account) => (
+                    <option key={account.id} value={account.id}>
+                      🎵 {account.username}
+                      {account.displayName ? ` (${account.displayName})` : ""}
+                    </option>
+                  ))}
+                </select>
+                {tiktokAccounts.length === 0 && (
+                  <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                    ❌ Nenhuma conta TikTok conectada. <a href="/settings/meta-accounts" className="underline">Conecte uma</a>
+                  </p>
+                )}
+              </div>
+
+              {/* YouTube Account Selection */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Conta YouTube *
+                </label>
+                <select
+                  value={selectedYoutubeAccountId}
+                  onChange={(e) => setSelectedYoutubeAccountId(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
+                >
+                  <option value="">Selecionar conta YouTube...</option>
+                  {youtubeAccounts.map((account) => (
+                    <option key={account.id} value={account.id}>
+                      📺 {account.channelName}
+                      {account.channelId ? ` (${account.channelId})` : ""}
+                    </option>
+                  ))}
+                </select>
+                {youtubeAccounts.length === 0 && (
+                  <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                    ❌ Nenhuma conta YouTube conectada. <a href="/settings/meta-accounts" className="underline">Conecte uma</a>
+                  </p>
+                )}
+              </div>
               <h2 className="text-xl font-bold text-gray-900 dark:text-white">
                 Configurar Agendamento
               </h2>
@@ -632,7 +746,7 @@ export default function BatchSchedulePage() {
                   Plataformas:
                 </label>
                 <div className="space-y-2">
-                  {['FACEBOOK', 'INSTAGRAM'].map((platform) => (
+                  {['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'YOUTUBE'].map((platform) => (
                     <label key={platform} className="flex items-center gap-3">
                       <input
                         type="checkbox"
@@ -649,11 +763,47 @@ export default function BatchSchedulePage() {
                         className="w-4 h-4"
                       />
                       <span className="text-gray-900 dark:text-white font-medium">
-                        {platform === 'FACEBOOK' ? 'Facebook' : 'Instagram'}
+                        {platform === 'FACEBOOK' ? 'Facebook' : platform === 'INSTAGRAM' ? 'Instagram' : platform === 'TIKTOK' ? 'TikTok' : 'YouTube'}
                       </span>
                     </label>
                   ))}
                 </div>
+              </div>
+
+              {/* Method */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+                  Método de publicação
+                </label>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="method"
+                      value="API"
+                      checked={method === 'API'}
+                      onChange={() => setMethod('API')}
+                      className="w-4 h-4"
+                    />
+                    <span className="text-sm text-gray-900 dark:text-white">API oficial (Meta)</span>
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="method"
+                      value="SCRAPE"
+                      checked={method === 'SCRAPE'}
+                      onChange={() => setMethod('SCRAPE')}
+                      className="w-4 h-4"
+                    />
+                    <span className="text-sm text-gray-900 dark:text-white">Scraping (navegador)</span>
+                  </label>
+                </div>
+                {method === 'SCRAPE' && (
+                  <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                    Requer sessão ativa do Facebook via navegador nas configurações
+                  </p>
+                )}
               </div>
             </div>
           )}
@@ -663,10 +813,10 @@ export default function BatchSchedulePage() {
         <div className="flex gap-4 mt-8">
           <button
             onClick={() => {
-              const steps: typeof step[] = ['niche', 'profiles', 'videos', 'schedule'];
+              const steps = ['niche', 'profiles', 'videos', 'schedule'] as const;
               const currentIndex = steps.indexOf(step);
               if (currentIndex > 0) {
-                setStep(steps[currentIndex - 1]);
+                setStep(steps[currentIndex - 1] as typeof step);
               }
             }}
             disabled={step === 'niche'}
@@ -678,10 +828,10 @@ export default function BatchSchedulePage() {
           {step !== 'schedule' ? (
             <button
               onClick={() => {
-                const steps: typeof step[] = ['niche', 'profiles', 'videos', 'schedule'];
+                const steps = ['niche', 'profiles', 'videos', 'schedule'] as const;
                 const currentIndex = steps.indexOf(step);
                 if (currentIndex < steps.length - 1) {
-                  setStep(steps[currentIndex + 1]);
+                  setStep(steps[currentIndex + 1] as typeof step);
                 }
               }}
               disabled={

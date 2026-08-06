@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { Platform } from '@prisma/client'
+import { NicheOverlayManager } from '@/components/overlays/NicheOverlayManager'
 
 const platformMeta: Record<Platform, { label: string, color: string }> = {
   INSTAGRAM: { label: 'IG', color: '#e1306c' },
@@ -69,6 +70,8 @@ export default async function NicheProfilesPage({ params }: PageProps) {
           </Link>
         ))}
       </div>
+
+      <NicheOverlayManager nicheId={niche.id} />
     </div>
   )
 }

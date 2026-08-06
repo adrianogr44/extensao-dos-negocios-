@@ -1,4 +1,4 @@
-import { MetaAuthUrlParams, MetaTokenResponse, MetaPageListResponse } from './types';
+import { MetaAuthUrlParams, MetaTokenResponse, MetaPageInfo, MetaPageListResponse } from './types';
 
 const API_VERSION = 'v20.0';
 const GRAPH_API_BASE = `https://graph.instagram.com/${API_VERSION}`;

@@ -1,5 +1,18 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Publicadores via Scraping
+
+O dashboard publica vídeos no Facebook, TikTok e YouTube usando **Playwright** (navegador headless) quando a API oficial está bloqueada (App Review pendente).
+
+- **Facebook:** [docs/FACEBOOK_SCRAPE_PUBLISHER.md](../../docs/FACEBOOK_SCRAPE_PUBLISHER.md)
+- **TikTok e YouTube:** [docs/TIKTOK_YOUTUBE_SCRAPE_PUBLISHERS.md](../../docs/TIKTOK_YOUTUBE_SCRAPE_PUBLISHERS.md)
+
+Antes de configurar as contas, garanta que o Chromium do Playwright esteja instalado:
+
+```bash
+npx playwright install chromium
+```
+
 ## Getting Started
 
 First, run the development server:

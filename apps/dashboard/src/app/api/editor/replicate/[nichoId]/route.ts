@@ -3,6 +3,8 @@ import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 
 const replicateSchema = z.object({
+  overlayId: z.string().nullish(),
+  overlayBehind: z.boolean().default(false),
   posX: z.number().min(-500).max(500).default(0),
   posY: z.number().min(-500).max(500).default(0),
   scale: z.number().min(0.1).max(3.0).default(1.0),
@@ -28,14 +30,26 @@ const replicateSchema = z.object({
   cropOpacity: z.number().min(0).max(1).default(1.0),
   speed: z.number().min(0.5).max(2.0).default(1.0),
   mirror: z.boolean().default(false),
+  eqEnabled: z.boolean().default(false),
+  eqBrightness: z.number().default(1.0),
+  eqContrast: z.number().default(1.0),
+  eqSaturation: z.number().default(1.0),
+  grain: z.boolean().default(false),
+  grainAmount: z.number().default(0.0),
+  frameDrop: z.boolean().default(false),
+  zoomBreathing: z.boolean().default(false),
+  zoomBreathAmount: z.number().default(0.0),
 })
 
 const ALLOWED_FIELDS = [
+  'overlayId','overlayBehind',
   'posX','posY','scale','zoom','volume','rotation',
   'overlayX','overlayY','opacity',
   'overlayCropTop','overlayCropBottom',
   'cropTop','cropBottom','bgColor','cropColor','cropOpacity',
   'speed','mirror','texts',
+  'eqEnabled','eqBrightness','eqContrast','eqSaturation',
+  'grain','grainAmount','frameDrop','zoomBreathing','zoomBreathAmount',
 ] as const
 
 export async function POST(req: Request, { params }: { params: { nichoId: string } }) {

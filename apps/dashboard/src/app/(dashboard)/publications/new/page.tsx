@@ -1,16 +1,26 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ScheduleForm } from '@/components/meta/schedule-form';
-import { ScheduleFormData, MetaAccountDTO, TemplateDTO, PublicationDTO } from '@/lib/meta/types';
+import { ScheduleFormData, MetaAccountDTO, TemplateDTO, PublicationDTO, TikTokAccountDTO, YouTubeAccountDTO } from '@/lib/meta/types';
 
 export default function NewPublicationPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-12 px-4 sm:px-6 lg:px-8 animate-pulse">Carregando...</div>}>
+      <NewPublicationPageInner />
+    </Suspense>
+  );
+}
+
+function NewPublicationPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const videoId = searchParams.get('videoId');
 
   const [videoTitle, setVideoTitle] = useState('Video');
   const [accounts, setAccounts] = useState<MetaAccountDTO[]>([]);
+  const [tiktokAccounts, setTiktokAccounts] = useState<TikTokAccountDTO[]>([]);
+  const [youtubeAccounts, setYoutubeAccounts] = useState<YouTubeAccountDTO[]>([]);
   const [templates, setTemplates] = useState<TemplateDTO[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -34,6 +44,20 @@ export default function NewPublicationPage() {
         }
         const accountsData = await accountsResponse.json();
         setAccounts(accountsData);
+
+        // Carregar contas TikTok
+        const ttResponse = await fetch('/api/tiktok/accounts');
+        if (ttResponse.ok) {
+          const ttData = await ttResponse.json();
+          setTiktokAccounts(ttData.data || []);
+        }
+
+        // Carregar contas YouTube
+        const ytResponse = await fetch('/api/youtube/accounts');
+        if (ytResponse.ok) {
+          const ytData = await ytResponse.json();
+          setYoutubeAccounts(ytData.data || []);
+        }
 
         // Carregar templates
         const templatesResponse = await fetch('/api/meta/templates');
@@ -61,8 +85,8 @@ export default function NewPublicationPage() {
 
     // TODO: Obter metaAccountId do formulário
     // Por enquanto, usar a primeira conta conectada
-    const metaAccountId = accounts[0]?.id;
-    if (!metaAccountId) {
+    const metaAccountId = data.metaAccountId || accounts[0]?.id;
+    if (!metaAccountId && data.platforms.some(p => p === 'FACEBOOK' || p === 'INSTAGRAM')) {
       throw new Error('Nenhuma conta Meta conectada');
     }
 
@@ -73,10 +97,13 @@ export default function NewPublicationPage() {
         body: JSON.stringify({
           videoId,
           metaAccountId,
+          tiktokAccountId: data.tiktokAccountId,
+          youtubeAccountId: data.youtubeAccountId,
           description: data.description,
           hashtags: data.hashtags,
           platforms: data.platforms,
           scheduledFor: data.scheduledFor,
+          method: data.method || 'SCRAPE',
           saveAsTemplate: data.saveAsTemplate,
           templateName: data.templateName,
         }),
@@ -159,6 +186,8 @@ export default function NewPublicationPage() {
         videoId={videoId || ''}
         videoTitle={videoTitle}
         accounts={accounts}
+        tiktokAccounts={tiktokAccounts}
+        youtubeAccounts={youtubeAccounts}
         templates={templates}
         onSubmit={handleSubmit}
         onCancel={() => router.back()}

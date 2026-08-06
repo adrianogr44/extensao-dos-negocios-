@@ -5,11 +5,14 @@ import { z } from 'zod';
 // Validação do payload
 const SchedulePublicationSchema = z.object({
   videoId: z.string().min(1, 'Video ID is required'),
-  metaAccountId: z.string().min(1, 'Meta Account ID is required'),
+  metaAccountId: z.string().optional(),
+  tiktokAccountId: z.string().optional(),
+  youtubeAccountId: z.string().optional(),
   description: z.string().min(1).max(2200),
   hashtags: z.array(z.string()).default([]),
-  platforms: z.array(z.enum(['FACEBOOK', 'INSTAGRAM'])).min(1),
+  platforms: z.array(z.enum(['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'YOUTUBE'])).min(1),
   scheduledFor: z.string().datetime(),
+  method: z.enum(['API', 'SCRAPE']).default('API'),
   templateId: z.string().optional(),
   saveAsTemplate: z.boolean().optional(),
   templateName: z.string().optional(),
@@ -28,16 +31,53 @@ export async function POST(request: Request) {
     // Validar payload
     const data = SchedulePublicationSchema.parse(body);
 
-    // Validar se metaAccountId existe e está ativo
-    const account = await prisma.metaAccount.findUnique({
-      where: { id: data.metaAccountId },
-    });
+    // Validar que pelo menos uma conta foi informada conforme as plataformas
+    const requiresMeta = data.platforms.some(p => p === 'FACEBOOK' || p === 'INSTAGRAM');
+    const requiresTikTok = data.platforms.includes('TIKTOK');
+    const requiresYouTube = data.platforms.includes('YOUTUBE');
 
-    if (!account || !account.isActive) {
-      return Response.json(
-        { error: 'Meta account not found or inactive' },
-        { status: 404 },
-      );
+    if (requiresMeta && !data.metaAccountId) {
+      return Response.json({ error: 'Selecione uma conta Meta (Facebook/Instagram)' }, { status: 400 });
+    }
+    if (requiresTikTok && !data.tiktokAccountId) {
+      return Response.json({ error: 'Selecione uma conta TikTok' }, { status: 400 });
+    }
+    if (requiresYouTube && !data.youtubeAccountId) {
+      return Response.json({ error: 'Selecione uma conta YouTube' }, { status: 400 });
+    }
+
+    // Validar se metaAccountId existe e está ativo
+    if (data.metaAccountId) {
+      const account = await prisma.metaAccount.findUnique({
+        where: { id: data.metaAccountId },
+      });
+
+      if (!account || !account.isActive) {
+        return Response.json(
+          { error: 'Meta account not found or inactive' },
+          { status: 404 },
+        );
+      }
+    }
+
+    // Validar se tiktokAccountId existe
+    if (data.tiktokAccountId) {
+      const ttAccount = await prisma.tiktokAccount.findUnique({
+        where: { id: data.tiktokAccountId },
+      });
+      if (!ttAccount) {
+        return Response.json({ error: 'TikTok account not found' }, { status: 404 });
+      }
+    }
+
+    // Validar se youtubeAccountId existe
+    if (data.youtubeAccountId) {
+      const ytAccount = await prisma.youtubeAccount.findUnique({
+        where: { id: data.youtubeAccountId },
+      });
+      if (!ytAccount) {
+        return Response.json({ error: 'YouTube account not found' }, { status: 404 });
+      }
     }
 
     // Validar se scheduledFor é no futuro
@@ -53,7 +93,7 @@ export async function POST(request: Request) {
     const existingPublication = await prisma.publication.findFirst({
       where: {
         videoId: data.videoId,
-        metaAccountId: data.metaAccountId,
+        metaAccountId: data.metaAccountId || null,
         scheduledFor: scheduledDate,
       },
     });
@@ -69,13 +109,16 @@ export async function POST(request: Request) {
     const publication = await prisma.publication.create({
       data: {
         videoId: data.videoId,
-        metaAccountId: data.metaAccountId,
+        metaAccountId: data.metaAccountId || null,
+        tiktokAccountId: data.tiktokAccountId || null,
+        youtubeAccountId: data.youtubeAccountId || null,
         description: data.description,
         hashtags: JSON.stringify(data.hashtags),
         platforms: data.platforms,
         scheduledFor: scheduledDate,
         templateId: data.templateId,
         status: 'SCHEDULED',
+        method: data.method,
       },
     });
 

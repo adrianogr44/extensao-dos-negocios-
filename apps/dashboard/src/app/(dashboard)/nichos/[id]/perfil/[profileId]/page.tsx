@@ -39,14 +39,14 @@ export default function ProfileVideosPage() {
   const [downloadingAll, setDownloadingAll] = useState(false)
 
   async function load() {
-    const [profileRes, overlayRes] = await Promise.all([
-      fetch(`/api/perfil/${params.profileId}`),
-      fetch('/api/overlay/list'),
-    ])
+    const profileRes = await fetch(`/api/perfil/${params.profileId}`)
     const profileData = await profileRes.json()
-    const overlayData = await overlayRes.json()
-    if (profileData.success) setProfile(profileData.data)
-    if (overlayData.success) setAllOverlays(overlayData.data)
+    if (profileData.success) {
+      setProfile(profileData.data)
+      const overlayRes = await fetch(`/api/overlay/list?nicheId=${profileData.data.nicheId || ''}`)
+      const overlayData = await overlayRes.json()
+      if (overlayData.success) setAllOverlays(overlayData.data)
+    }
     setLoading(false)
   }
 

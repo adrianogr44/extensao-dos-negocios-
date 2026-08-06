@@ -3,6 +3,8 @@ import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 
 const editConfigSchema = z.object({
+  overlayId: z.string().nullish(),
+  overlayBehind: z.boolean().default(false),
   posX: z.number().default(0),
   posY: z.number().default(0),
   scale: z.number().default(1.0),
@@ -21,6 +23,15 @@ const editConfigSchema = z.object({
   cropOpacity: z.number().min(0).max(1).default(1.0),
   speed: z.number().min(0.5).max(2.0).default(1.0),
   mirror: z.boolean().default(false),
+  eqEnabled: z.boolean().default(false),
+  eqBrightness: z.number().default(1.0),
+  eqContrast: z.number().default(1.0),
+  eqSaturation: z.number().default(1.0),
+  grain: z.boolean().default(false),
+  grainAmount: z.number().default(0.0),
+  frameDrop: z.boolean().default(false),
+  zoomBreathing: z.boolean().default(false),
+  zoomBreathAmount: z.number().default(0.0),
   texts: z.array(z.object({
     content: z.string(),
     x: z.number(),

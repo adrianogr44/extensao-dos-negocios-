@@ -6,13 +6,20 @@ const FFPROBE_PATH = process.env.FFPROBE_PATH || 'ffprobe'
 
 // drawtext usa libfreetype, que só suporta fontes outline (TrueType/OpenType com contornos).
 // NotoColorEmoji.ttf é uma fonte bitmap colorida (CBDT/CBLC) — NÃO funciona com drawtext.
-// Priorizamos fontes outline com boa cobertura Unicode.
+// Priorizamos a MESMA fonte que o preview do editor usa (Roboto Bold via next/font),
+// para que a posição/tamanho dos textos no render fique idêntica ao canvas.
 function getDefaultFont() {
+  const cwd = process.cwd()
   const candidates = [
-    '/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf',
-    '/usr/share/fonts/opentype/noto/NotoSans-Regular.ttf',
-    '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
-    '/usr/share/fonts/truetype/noto/NotoSansMono-Regular.ttf',
+    // Roboto Bold embarcado na app — deve casar com `bold ... Roboto` do EditorCanvas
+    `${cwd}/public/fonts/Roboto-Bold.ttf`,
+    `${cwd}/apps/dashboard/public/fonts/Roboto-Bold.ttf`,
+    `/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf`,
+    `/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf`,
+    `/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf`,
+    `/usr/share/fonts/opentype/noto/NotoSans-Regular.ttf`,
+    `/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf`,
+    `/usr/share/fonts/truetype/noto/NotoSansMono-Regular.ttf`,
   ]
 
   for (const candidate of candidates) {
@@ -46,12 +53,37 @@ export async function getVideoInfo(filePath: string) {
   return JSON.parse(stdout)
 }
 
-export function buildOverlayFilter(params: {
+export async function getVideoDurationSeconds(filePath: string) {
+  try {
+    const info = await getVideoInfo(filePath)
+    const d = parseFloat(info?.format?.duration || '0')
+    return Number.isFinite(d) ? d : 0
+  } catch {
+    return 0
+  }
+}
+
+export async function getVideoFps(filePath: string) {
+  try {
+    const info = await getVideoInfo(filePath)
+    const stream = info?.streams?.find((s: any) => s.codec_type === 'video')
+    if (!stream?.avg_frame_rate) return 0
+    const [num, den] = String(stream.avg_frame_rate).split('/').map(Number)
+    const fps = den ? num / den : num
+    return Number.isFinite(fps) && fps > 0 ? fps : 0
+  } catch {
+    return 0
+  }
+}
+
+export async function buildOverlayFilter(params: {
   inputVideo: string
   inputOverlay: string
   outputPath: string
-  video: { posX: number; posY: number; scale: number; zoom: number }
+  video: { posX: number; posY: number; scale: number; zoom: number; rotation?: number }
   overlay: { posX: number; posY: number; cropTop: number; cropBottom: number; opacity: number }
+  overlayBehind?: boolean
+  videoDurationMs?: number | null
   volume: number
   speed?: number
   mirror?: boolean
@@ -60,11 +92,20 @@ export function buildOverlayFilter(params: {
   bgColor?: string
   cropColor?: string
   cropOpacity?: number
+  eq?: { brightness?: number; contrast?: number; saturation?: number }
+  grain?: { amount?: number }
+  frameDrop?: { frames?: number }
+  zoomBreathing?: { amount?: number }
+  inputFps?: number
   texts?: Array<{ content: string; x: number; y: number; fontSize: number; color: string }>
 }) {
-  const { video, overlay, volume, speed, mirror, cropTop, cropBottom, bgColor, cropColor, cropOpacity, texts } = params
+  const { video, overlay, overlayBehind, videoDurationMs, volume, speed, mirror, cropTop, cropBottom, bgColor, cropColor, cropOpacity, eq, grain, frameDrop, zoomBreathing, inputFps, texts } = params
 
-  const scale = Math.max(0.5, Math.min(3, (video.zoom || 1) * (video.scale || 1)))
+  // Escala = produto `zoom * scale`, IGUAL ao preview do editor (EditorCanvas usa
+  // `config.scale * config.zoom` sem clamp). Removemos os clamps 0.5..3 para que o
+  // render respeite exatamente o valor mostrado no canvas (ex.: scale 0.45 × zoom
+  // 0.65 = 0.29 NÃO deve ser elevado a 0.5).
+  const scale = (video.zoom || 1) * (video.scale || 1)
   const speedVal = Math.max(0.5, Math.min(2, speed ?? 1))
   const overlayX = Math.round(overlay.posX || 0)
   const overlayY = Math.round(overlay.posY || 0)
@@ -76,17 +117,37 @@ export function buildOverlayFilter(params: {
   // VIDEO CHAIN
   // 1. Espelha (se necessário)
   // 2. Scale: mantém aspect ratio, limita ao máximo
-  // 3. Crop bars: barras coloridas top/bottom sobre o vídeo
+  // 3. Crop bars: barras coloridas top/bottom sobre o vídeo (nunca tocam a overlay)
   // 4. Ajusta velocidade (se necessário)
-  // 5. Pad: centra no canvas 1080x1920 com fundo preto
+  // 5. Quando overlay ficar ATRÁS: o vídeo mantém suas dimensões (sem pad opaco),
+  //    e é posicionado via overlay filter. Caso contrário: pad centraliza em 1080x1920.
   let videoChain = '[0:v]'
 
   if (mirror) {
     videoChain += 'hflip,'
   }
 
-  // Scale com safe bounds: nunca deixa maior que 1080x1920
-  videoChain += `scale=w=min(1080\\,iw*${scale}):h=min(1920\\,ih*${scale}):force_original_aspect_ratio=decrease`
+  // Scale real: multiplica ambos os eixos pelo mesmo fator (igual ao preview do
+  // editor). O `pad`/`overlay` abaixo corta o excesso além de 1080x1920,
+  // reproduzindo o zoom-in/crop que o preview mostra.
+  videoChain += `scale=w=trunc(iw*${scale}/2)*2:h=trunc(ih*${scale}/2)*2`
+
+  // Ajuste de cor sutil (eq): quebra o fingerprint de cor sem mudar o visual
+  if (eq) {
+    const parts: string[] = []
+    if (Math.abs((eq.brightness ?? 1) - 1) > 0.001) parts.push(`brightness=${eq.brightness}`)
+    if (Math.abs((eq.contrast ?? 1) - 1) > 0.001) parts.push(`contrast=${eq.contrast}`)
+    if (Math.abs((eq.saturation ?? 1) - 1) > 0.001) parts.push(`saturation=${eq.saturation}`)
+    if (parts.length) videoChain += `,eq=${parts.join(':')}`
+  }
+
+  // Rotação sutil + recorte automático das bordas (remove triângulos pretos)
+  const rotDeg = Math.max(-6, Math.min(6, params.video.rotation || 0))
+  if (Math.abs(rotDeg) > 0.001) {
+    const rotRad = (rotDeg * Math.PI) / 180
+    videoChain += `,rotate=${rotRad.toFixed(6)}:fillcolor=black:c=black`
+    videoChain += `,crop=w=trunc(iw*cos(${rotRad.toFixed(6)})-ih*sin(${rotRad.toFixed(6)})):h=trunc(ih*cos(${rotRad.toFixed(6)})-iw*sin(${rotRad.toFixed(6)}))`
+  }
 
   // Crop bars: drawbox no topo e/ou base do vídeo escalado
   const cropT = Math.round((cropTop || 0) * scale)
@@ -98,14 +159,24 @@ export function buildOverlayFilter(params: {
     videoChain += `,drawbox=x=0:y=ih-${cropB}:w=iw:h=${cropB}:color=${cropColor || '#000000'}@${cropOpacity ?? 1}:t=fill`
   }
 
+  // Micro-corte de frames: descarta N frames no início e reajusta o PTS
+  const dropFrames = Math.max(0, Math.floor(frameDrop?.frames || 0))
+  if (dropFrames > 0) {
+    videoChain += `,trim=start_frame=${dropFrames},setpts=PTS-STARTPTS`
+  }
+
   if (Math.abs(speedVal - 1) > 0.001) {
     videoChain += `,setpts=PTS/${speedVal}`
   }
 
-  // Pad: centraliza em 1080x1920 com offset posX/posY do editor
-  const padX = posX >= 0 ? `(ow-iw)/2+${posX}` : `(ow-iw)/2${posX}`
-  const padY = posY >= 0 ? `(oh-ih)/2+${posY}` : `(oh-ih)/2${posY}`
-  videoChain += `,pad=w=1080:h=1920:x=${padX}:y=${padY}:color=${bgColor || 'black'}[v]`
+  if (overlayBehind) {
+    // Sem pad opaco: o vídeo mantém as dimensões escaladas; posicionamento via overlay.
+    videoChain += '[v]'
+  } else {
+    const padX = posX >= 0 ? `(ow-iw)/2+${posX}` : `(ow-iw)/2${posX}`
+    const padY = posY >= 0 ? `(oh-ih)/2+${posY}` : `(oh-ih)/2${posY}`
+    videoChain += `,pad=w=1080:h=1920:x=${padX}:y=${padY}:color=${bgColor || 'black'}[v]`
+  }
   filters.push(videoChain)
 
   // OVERLAY CHAIN
@@ -131,8 +202,21 @@ export function buildOverlayFilter(params: {
   filters.push(overlayChain)
 
   // COMPOSITE
-  // Sobrepõe overlay na posição especificada
-  filters.push(`[v][ov]overlay=x=${overlayX}+(W-w)/2:y=${overlayY}+(H-h)/2:format=auto[comp]`)
+  // overlay por cima (padrão): [v][ov]overlay -> overlay sobre o vídeo
+  // overlay atrás (vídeo por cima): base color + overlay, depois vídeo por cima
+  // O corte (drawbox) é aplicado somente na cadeia do vídeo, então nunca corta a overlay.
+  if (overlayBehind) {
+    // Duração do canvas de fundo deve acompanhar o vídeo (considerando speed).
+    let durSec = videoDurationMs ? videoDurationMs / 1000 / speedVal : 0
+    if (durSec <= 0) {
+      durSec = await getVideoDurationSeconds(params.inputVideo) / speedVal
+    }
+    filters.push(`color=c=${bgColor || 'black'}:s=1080x1920:d=${durSec.toFixed(3)}[base]`)
+    filters.push(`[base][ov]overlay=x=${overlayX}+(W-w)/2:y=${overlayY}+(H-h)/2:format=auto[bg]`)
+    filters.push(`[bg][v]overlay=x=(W-w)/2+${posX}:y=(H-h)/2+${posY}:format=auto[comp]`)
+  } else {
+    filters.push(`[v][ov]overlay=x=${overlayX}+(W-w)/2:y=${overlayY}+(H-h)/2:format=auto[comp]`)
+  }
 
   // TEXT RENDERING via drawtext
   let currentLabel = 'comp'
@@ -157,8 +241,28 @@ export function buildOverlayFilter(params: {
   }
 
   // OUTPUT CHAIN
-  // Formata para yuv420p (compatível com h.264)
-  filters.push(`[${currentLabel}]format=yuv420p[out]`)
+  // 1. Zoom breathing (Ken Burns sutil) aplicado ao canvas final 1080x1920
+  // 2. Grain/ruído leve sobre o frame composto
+  // 3. Formata para yuv420p (compatível com h.264)
+  const outParts: string[] = []
+
+  const zoomAmount = zoomBreathing?.amount || 0
+  if (zoomAmount > 0.001) {
+    const fps = Math.max(1, Math.round(inputFps || 30))
+    // zoom incremental até 1+amount ao longo do vídeo
+    const zMax = (1 + Math.min(0.06, zoomAmount)).toFixed(4)
+    const zInc = Math.max(0.00005, zoomAmount / Math.max(1, (videoDurationMs || 30000) / 1000 * fps)).toFixed(7)
+    outParts.push(`zoompan=z='min(zoom+${zInc}\\,${zMax})':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps=${fps}`)
+  }
+
+  const grainAmount = grain?.amount || 0
+  if (grainAmount > 0.001) {
+    const noise = Math.max(1, Math.round(Math.min(0.5, grainAmount) * 10))
+    outParts.push(`noise=alls=${noise}`)
+  }
+
+  outParts.push('format=yuv420p')
+  filters.push(`[${currentLabel}]${outParts.join(',')}[out]`)
 
   const filterComplex = filters.join(';')
 

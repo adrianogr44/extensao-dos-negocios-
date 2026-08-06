@@ -27,6 +27,7 @@ export async function processScheduledPublications(): Promise<PublicationSchedul
     const scheduledPublications = await prisma.publication.findMany({
       where: {
         status: 'SCHEDULED',
+        method: 'API',
         scheduledFor: {
           lte: now,
         },

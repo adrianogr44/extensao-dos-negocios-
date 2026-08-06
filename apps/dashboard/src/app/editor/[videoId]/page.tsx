@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { EditorCanvas } from '@/components/editor/EditorCanvas'
 import { ControlsPanel } from '@/components/editor/ControlsPanel'
+import { OverlaySelector, type OverlayOption } from '@/components/editor/OverlaySelector'
 import { Button } from '@/components/ui/button'
 
 interface EditConfig {
@@ -18,6 +19,7 @@ interface EditConfig {
   overlayCropTop: number
   overlayCropBottom: number
   opacity: number
+  overlayBehind: boolean
   cropTop: number
   cropBottom: number
   bgColor: string
@@ -25,6 +27,15 @@ interface EditConfig {
   cropOpacity: number
   speed: number
   mirror: boolean
+  eqEnabled: boolean
+  eqBrightness: number
+  eqContrast: number
+  eqSaturation: number
+  grain: boolean
+  grainAmount: number
+  frameDrop: boolean
+  zoomBreathing: boolean
+  zoomBreathAmount: number
   texts: Array<{ content: string; x: number; y: number; fontSize: number; color: string }>
 }
 
@@ -47,9 +58,13 @@ interface Video {
 
 const defaultConfig: EditConfig = {
   posX: 0, posY: 0, scale: 1, zoom: 1, volume: 1, rotation: 0,
-  overlayX: 0, overlayY: 0, overlayCropTop: 0, overlayCropBottom: 0, opacity: 1,
+  overlayX: 0, overlayY: 0, overlayCropTop: 0, overlayCropBottom: 0, opacity: 1, overlayBehind: false,
   cropTop: 0, cropBottom: 0, bgColor: '#000000', cropColor: '#000000', cropOpacity: 1,
   speed: 1, mirror: false,
+  eqEnabled: false, eqBrightness: 1, eqContrast: 1, eqSaturation: 1,
+  grain: false, grainAmount: 0,
+  frameDrop: false,
+  zoomBreathing: false, zoomBreathAmount: 0,
   texts: [],
 }
 
@@ -58,6 +73,8 @@ export default function EditorPage() {
   const router = useRouter()
   const [video, setVideo] = useState<Video | null>(null)
   const [overlayUrl, setOverlayUrl] = useState<string | null>(null)
+  const [overlays, setOverlays] = useState<OverlayOption[]>([])
+  const [selectedOverlayId, setSelectedOverlayId] = useState<string | null>(null)
   const [videoUrl, setVideoUrl] = useState<string | null>(null)
   const [config, setConfig] = useState<EditConfig>(defaultConfig)
   const [saving, setSaving] = useState(false)
@@ -89,33 +106,59 @@ export default function EditorPage() {
             overlayX: ec.overlayX || 0, overlayY: ec.overlayY || 0,
             overlayCropTop: ec.overlayCropTop || 0, overlayCropBottom: ec.overlayCropBottom || 0,
             opacity: ec.opacity || 1,
+            overlayBehind: ec.overlayBehind ?? false,
             cropTop: ec.cropTop || 0, cropBottom: ec.cropBottom || 0,
             bgColor: ec.bgColor || '#000000',
             cropColor: ec.cropColor || '#000000',
             cropOpacity: ec.cropOpacity ?? 1,
             speed: ec.speed ?? 1,
             mirror: ec.mirror ?? false,
+            eqEnabled: ec.eqEnabled ?? false,
+            eqBrightness: ec.eqBrightness ?? 1,
+            eqContrast: ec.eqContrast ?? 1,
+            eqSaturation: ec.eqSaturation ?? 1,
+            grain: ec.grain ?? false,
+            grainAmount: ec.grainAmount ?? 0,
+            frameDrop: ec.frameDrop ?? false,
+            zoomBreathing: ec.zoomBreathing ?? false,
+            zoomBreathAmount: ec.zoomBreathAmount ?? 0,
             texts: ec.texts || [],
           })
+          if (ec.overlayId) setSelectedOverlayId(ec.overlayId)
         }
 
-        // Load overlay: profile-specific first, fallback to global latest
-        let overlayUrl = ''
-        if (videoData.data.profileId) {
+        // Load overlays do nicho do vídeo (nicho + globais)
+        const overlayRes = await fetch(`/api/overlay/list?nicheId=${videoData.data.niche?.id || ''}`)
+        const overlayData = await overlayRes.json()
+        const overlayList: OverlayOption[] = overlayData.success ? overlayData.data : []
+        setOverlays(overlayList)
+
+        // Resolve overlay inicial: editor > perfil > padrão do nicho > global
+        let chosen: OverlayOption | null = null
+        const ec = videoData.data.editConfigs
+        if (ec?.overlayId) {
+          chosen = overlayList.find(o => o.id === ec.overlayId) || null
+        }
+        if (!chosen && videoData.data.profileId) {
           const profileRes = await fetch(`/api/perfil/${videoData.data.profileId}`)
           const profileData = await profileRes.json()
-          if (profileData.success && profileData.data?.overlay) {
-            overlayUrl = profileData.data.overlay.url
+          const po = profileData.success ? profileData.data?.overlay : null
+          if (po) {
+            const poUrl = `/api/videos/stream/postreels-overlays/${po.minioKey}`
+            chosen = { id: po.id, filename: po.filename, url: poUrl, isDefault: po.isDefault, nicheId: po.nicheId }
+            if (!overlayList.some(o => o.id === po.id)) {
+              setOverlays(prev => [...prev, chosen!])
+            }
           }
         }
-        if (!overlayUrl) {
-          const overlayRes = await fetch('/api/overlay/upload')
-          const overlayData = await overlayRes.json()
-          if (overlayData.success && overlayData.data) {
-            overlayUrl = overlayData.data.url
-          }
+        if (!chosen) {
+          chosen = overlayList.find(o => o.isDefault && o.nicheId === videoData.data.niche?.id) || null
         }
-        setOverlayUrl(overlayUrl)
+        if (!chosen) {
+          chosen = overlayList.filter(o => o.nicheId === null).sort((a, b) => ((a.createdAt || '') < (b.createdAt || '') ? 1 : -1))[0] || null
+        }
+        setOverlayUrl(chosen?.url || '')
+        if (selectedOverlayId === null && chosen) setSelectedOverlayId(chosen.id)
       }
 
       setLoading(false)
@@ -133,6 +176,12 @@ export default function EditorPage() {
 
   const [saveError, setSaveError] = useState<string | null>(null)
 
+  function handleSelectOverlay(id: string | null) {
+    setSelectedOverlayId(id)
+    const ov = overlays.find(o => o.id === id)
+    setOverlayUrl(ov ? ov.url : '')
+  }
+
   async function saveConfig(replicate = false) {
     setSaving(true)
     setSaveError(null)
@@ -142,10 +191,12 @@ export default function EditorPage() {
           : `/api/editor/replicate/${video?.niche.id}`)
       : `/api/videos/${params.videoId}/edit-config`
 
+    const body = { ...config, overlayId: selectedOverlayId }
+
     const res = await fetch(url, {
       method: replicate ? 'POST' : 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(config),
+      body: JSON.stringify(body),
     })
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: 'Erro desconhecido' }))
@@ -255,6 +306,17 @@ export default function EditorPage() {
         </div>
 
         <div className="w-80 overflow-y-auto border-l border-zinc-800 p-6">
+          <div className="mb-4">
+            <h4 className="mb-2 text-xs font-semibold tracking-wider text-zinc-500 uppercase">
+              Overlay do vídeo
+            </h4>
+            <OverlaySelector
+              overlays={overlays}
+              selectedOverlayId={selectedOverlayId}
+              onSelect={handleSelectOverlay}
+            />
+          </div>
+
           <ControlsPanel
             config={config}
             onChange={handleConfigChange}

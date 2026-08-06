@@ -1,5 +1,6 @@
 generator client {
   provider = "prisma-client-js"
+  output   = "/home/gosantos/projects/postreels-v2/apps/dashboard/prisma/generated"
 }
 
 datasource db {
@@ -25,13 +26,14 @@ model Profile {
 }
 
 model Niche {
-  id        String    @id @default(uuid())
-  nome      String    @unique
+  id        String     @id @default(uuid())
+  nome      String     @unique
   cor       String?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
   videos    Video[]
   profiles  Profile[]
+  overlays  Overlay[]
 }
 
 model Video {
@@ -68,20 +70,30 @@ enum Status {
 }
 
 model Overlay {
-  id        String    @id @default(uuid())
-  filename  String
-  minioKey  String
-  width     Int
-  height    Int
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  profiles  Profile[]
+  id          String         @id @default(uuid())
+  filename    String
+  minioKey    String
+  width       Int
+  height      Int
+  nicheId     String?
+  niche       Niche?         @relation(fields: [nicheId], references: [id], onDelete: SetNull)
+  isDefault   Boolean        @default(false)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  profiles    Profile[]
+  editConfigs EditConfig[]
+
+  @@index([nicheId])
+  @@index([isDefault])
 }
 
 model EditConfig {
   id        String   @id @default(uuid())
   videoId   String   @unique
   video     Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  overlayId String?
+  overlay   Overlay? @relation(fields: [overlayId], references: [id], onDelete: SetNull)
+  overlayBehind Boolean @default(false)
   posX      Int      @default(0)
   posY      Int      @default(0)
   scale     Float    @default(1.0)
@@ -100,6 +112,15 @@ model EditConfig {
   cropOpacity Float   @default(1.0)
   speed     Float    @default(1.0)
   mirror    Boolean  @default(false)
+  eqEnabled  Boolean  @default(false)
+  eqBrightness Float @default(1.0)
+  eqContrast Float   @default(1.0)
+  eqSaturation Float @default(1.0)
+  grain      Boolean  @default(false)
+  grainAmount Float  @default(0.0)
+  frameDrop  Boolean  @default(false)
+  zoomBreathing Boolean @default(false)
+  zoomBreathAmount Float @default(0.0)
   texts     Json?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -160,6 +181,7 @@ model MetaAccount {
 
   // Relations
   publications      Publication[]
+  facebookSession   FacebookSession?
 
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
@@ -188,8 +210,12 @@ model PublicationTemplate {
 
 model Publication {
   id                String    @id @default(cuid())
-  metaAccountId     String
-  metaAccount       MetaAccount @relation(fields: [metaAccountId], references: [id], onDelete: Cascade)
+  metaAccountId     String?
+  metaAccount       MetaAccount? @relation(fields: [metaAccountId], references: [id], onDelete: Cascade)
+  tiktokAccountId   String?
+  tiktokAccount     TiktokAccount? @relation(fields: [tiktokAccountId], references: [id], onDelete: Cascade)
+  youtubeAccountId  String?
+  youtubeAccount    YoutubeAccount? @relation(fields: [youtubeAccountId], references: [id], onDelete: Cascade)
 
   videoId           String
   // video            Video     @relation(fields: [videoId], references: [id], onDelete: Cascade)
@@ -209,6 +235,9 @@ model Publication {
   // Status: DRAFT, SCHEDULED, PUBLISHED, FAILED
   status            String    @default("DRAFT")
 
+  // Método de publicação: "API" (Graph API) | "SCRAPE" (Playwright)
+  method            String    @default("API")
+
   // Meta response
   metaPostId        String?
   metaInsightsUrl   String?
@@ -226,9 +255,28 @@ model Publication {
 
   @@unique([videoId, metaAccountId, scheduledFor])
   @@index([metaAccountId])
+  @@index([tiktokAccountId])
+  @@index([youtubeAccountId])
   @@index([status])
   @@index([scheduledFor])
   @@index([videoId])
+}
+
+model FacebookSession {
+  id                String         @id @default(cuid())
+  metaAccountId     String?        @unique
+  metaAccount       MetaAccount?   @relation(fields: [metaAccountId], references: [id])
+
+  encryptedCookies  String         @db.Text
+  status            String         @default("active") // active | expired | requires_login
+  loggedInAs        String?
+  fbUserId          String?
+  lastUsedAt        DateTime?
+  expiresAt         DateTime?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  @@index([status])
 }
 
 model PublicationLog {
@@ -243,4 +291,93 @@ model PublicationLog {
 
   @@index([publicationId])
   @@index([createdAt])
+}
+
+// ============ TIKTOK SCRAPE PUBLISHER ============
+
+model TiktokAccount {
+  id                String    @id @default(cuid())
+  userId            String?
+
+  // Identificação da conta TikTok
+  username          String
+  displayName       String?
+  profilePictureUrl String?
+
+  // Status
+  isActive          Boolean   @default(true)
+  connectedAt       DateTime  @default(now())
+  lastSyncedAt      DateTime?
+
+  // Relations
+  publications      Publication[]
+  tiktokSession     TiktokSession?
+
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@unique([username])
+  @@index([userId])
+  @@index([isActive])
+}
+
+model TiktokSession {
+  id                String         @id @default(cuid())
+  tiktokAccountId   String?        @unique
+  tiktokAccount     TiktokAccount? @relation(fields: [tiktokAccountId], references: [id])
+
+  encryptedCookies  String         @db.Text
+  status            String         @default("active") // active | expired | requires_login
+  loggedInAs        String?
+  ttUserId          String?
+  lastUsedAt        DateTime?
+  expiresAt         DateTime?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  @@index([status])
+}
+
+// ============ YOUTUBE SCRAPE PUBLISHER ============
+
+model YoutubeAccount {
+  id                String    @id @default(cuid())
+  userId            String?
+
+  // Identificação do canal
+  channelName       String
+  channelId         String?
+  profilePictureUrl String?
+
+  // Status
+  isActive          Boolean   @default(true)
+  connectedAt       DateTime  @default(now())
+  lastSyncedAt      DateTime?
+
+  // Relations
+  publications      Publication[]
+  youtubeSession    YoutubeSession?
+
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([isActive])
+}
+
+model YoutubeSession {
+  id                String         @id @default(cuid())
+  youtubeAccountId  String?        @unique
+  youtubeAccount    YoutubeAccount? @relation(fields: [youtubeAccountId], references: [id])
+
+  encryptedCookies  String         @db.Text
+  status            String         @default("active") // active | expired | requires_login
+  loggedInAs        String?
+  googleUserId      String?
+  lastUsedAt        DateTime?
+  expiresAt         DateTime?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  @@index([status])
 }

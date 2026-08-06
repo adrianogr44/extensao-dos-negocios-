@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Loader2, Trash2, Edit2, PlayCircle } from 'lucide-react';
 import { PublicationDTO } from '@/lib/meta/types';
@@ -7,6 +7,14 @@ import { PublicationDTO } from '@/lib/meta/types';
 type PublicationStatus = 'DRAFT' | 'SCHEDULED' | 'PUBLISHED' | 'FAILED';
 
 export default function PublicationsPage() {
+  return (
+    <Suspense fallback={<div className="min-h-full p-6 animate-pulse">Carregando...</div>}>
+      <PublicationsPageInner />
+    </Suspense>
+  );
+}
+
+function PublicationsPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
 

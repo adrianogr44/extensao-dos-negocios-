@@ -3,11 +3,14 @@ import { z } from 'zod';
 
 const batchScheduleSchema = z.object({
   videoIds: z.array(z.string()).min(1),
-  metaAccountId: z.string(),
+  metaAccountId: z.string().optional(),
+  tiktokAccountId: z.string().optional(),
+  youtubeAccountId: z.string().optional(),
   description: z.string().max(2200),
   hashtags: z.array(z.string()).optional(),
-  platforms: z.array(z.enum(['FACEBOOK', 'INSTAGRAM'])).min(1),
+  platforms: z.array(z.enum(['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'YOUTUBE'])).min(1),
   scheduleTimes: z.array(z.string().datetime()),
+  method: z.enum(['API', 'SCRAPE']).default('API'),
 });
 
 type BatchSchedulePayload = z.infer<typeof batchScheduleSchema>;
@@ -33,16 +36,53 @@ export async function POST(request: Request) {
       );
     }
 
-    // Validar que meta account existe
-    const metaAccount = await prisma.metaAccount.findUnique({
-      where: { id: validated.metaAccountId },
-    });
+    // Validar que pelo menos uma conta foi informada conforme as plataformas
+    const requiresMeta = validated.platforms.some(p => p === 'FACEBOOK' || p === 'INSTAGRAM');
+    const requiresTikTok = validated.platforms.includes('TIKTOK');
+    const requiresYouTube = validated.platforms.includes('YOUTUBE');
 
-    if (!metaAccount) {
-      return Response.json(
-        { error: 'Meta account não encontrado' },
-        { status: 404 },
-      );
+    if (requiresMeta && !validated.metaAccountId) {
+      return Response.json({ error: 'Selecione uma conta Meta (Facebook/Instagram)' }, { status: 400 });
+    }
+    if (requiresTikTok && !validated.tiktokAccountId) {
+      return Response.json({ error: 'Selecione uma conta TikTok' }, { status: 400 });
+    }
+    if (requiresYouTube && !validated.youtubeAccountId) {
+      return Response.json({ error: 'Selecione uma conta YouTube' }, { status: 400 });
+    }
+
+    // Validar que meta account existe
+    if (validated.metaAccountId) {
+      const metaAccount = await prisma.metaAccount.findUnique({
+        where: { id: validated.metaAccountId },
+      });
+
+      if (!metaAccount) {
+        return Response.json(
+          { error: 'Meta account não encontrado' },
+          { status: 404 },
+        );
+      }
+    }
+
+    // Validar que tiktok account existe
+    if (validated.tiktokAccountId) {
+      const ttAccount = await prisma.tiktokAccount.findUnique({
+        where: { id: validated.tiktokAccountId },
+      });
+      if (!ttAccount) {
+        return Response.json({ error: 'Conta TikTok não encontrada' }, { status: 404 });
+      }
+    }
+
+    // Validar que youtube account existe
+    if (validated.youtubeAccountId) {
+      const ytAccount = await prisma.youtubeAccount.findUnique({
+        where: { id: validated.youtubeAccountId },
+      });
+      if (!ytAccount) {
+        return Response.json({ error: 'Conta YouTube não encontrada' }, { status: 404 });
+      }
     }
 
     // Validar que todos os vídeos existem e estão completos
@@ -84,12 +124,15 @@ export async function POST(request: Request) {
         return prisma.publication.create({
           data: {
             videoId,
-            metaAccountId: validated.metaAccountId,
+            metaAccountId: validated.metaAccountId || null,
+            tiktokAccountId: validated.tiktokAccountId || null,
+            youtubeAccountId: validated.youtubeAccountId || null,
             description: validated.description,
             hashtags: JSON.stringify(hashtags),
             platforms: validated.platforms,
             scheduledFor: new Date(validated.scheduleTimes[index]),
             status: 'SCHEDULED',
+            method: validated.method,
           },
         });
       }),

@@ -15,6 +15,7 @@ interface EditorCanvasProps {
     overlayCropTop: number
     overlayCropBottom: number
     opacity: number
+    overlayBehind: boolean
     cropTop: number
     cropBottom: number
     bgColor: string
@@ -49,6 +50,28 @@ function drawFrame(
   ctx.clearRect(0, 0, CANVAS_W, CANVAS_H)
   ctx.fillStyle = config.bgColor
   ctx.fillRect(0, 0, CANVAS_W, CANVAS_H)
+
+  const drawOverlay = () => {
+    if (!img || !overlayLoaded) return
+    const nw = img.naturalWidth; const nh = img.naturalHeight
+    const ct = config.overlayCropTop || 0; const cb = config.overlayCropBottom || 0
+    const ch = Math.max(1, nh - ct - cb)
+    const dw = nw * S; const dh = ch * S
+    const ox = config.overlayX * S + (CANVAS_W - dw) / 2
+    const oy = config.overlayY * S + (CANVAS_H - dh) / 2
+    ctx.save(); ctx.globalAlpha = config.opacity
+    ctx.drawImage(img, 0, ct, nw, ch, ox, oy, dw, dh)
+    ctx.globalAlpha = 1
+    ctx.strokeStyle = 'rgba(168,85,247,0.6)'; ctx.lineWidth = 1; ctx.setLineDash([3, 3])
+    ctx.strokeRect(ox, oy, dw, dh); ctx.setLineDash([])
+    const hc = (c: string) => { ctx.fillStyle = dragMode === c ? '#fbbf24' : '#a855f7'; ctx.fillRect(ox + dw / 2 - HANDLE / 2, (c === 'crop-top' ? oy : oy + dh) - HANDLE / 2, HANDLE, HANDLE); ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.strokeRect(ox + dw / 2 - HANDLE / 2, (c === 'crop-top' ? oy : oy + dh) - HANDLE / 2, HANDLE, HANDLE) }
+    if (ct > 0 || config.overlayCropTop === 0) hc('crop-top')
+    if (cb > 0 || config.overlayCropBottom === 0) hc('crop-bottom')
+    ctx.restore()
+  }
+
+  // Overlay atrás: desenha overlay antes do vídeo
+  if (config.overlayBehind) drawOverlay()
 
   // ── Video ──
   if (video && videoLoaded && video.videoWidth) {
@@ -90,24 +113,8 @@ function drawFrame(
     }
   }
 
-  // ── Overlay ──
-  if (img && overlayLoaded) {
-    const nw = img.naturalWidth; const nh = img.naturalHeight
-    const ct = config.overlayCropTop || 0; const cb = config.overlayCropBottom || 0
-    const ch = Math.max(1, nh - ct - cb)
-    const dw = nw * S; const dh = ch * S
-    const ox = config.overlayX * S + (CANVAS_W - dw) / 2
-    const oy = config.overlayY * S + (CANVAS_H - dh) / 2
-    ctx.save(); ctx.globalAlpha = config.opacity
-    ctx.drawImage(img, 0, ct, nw, ch, ox, oy, dw, dh)
-    ctx.globalAlpha = 1
-    ctx.strokeStyle = 'rgba(168,85,247,0.6)'; ctx.lineWidth = 1; ctx.setLineDash([3, 3])
-    ctx.strokeRect(ox, oy, dw, dh); ctx.setLineDash([])
-    const hc = (c: string) => { ctx.fillStyle = dragMode === c ? '#fbbf24' : '#a855f7'; ctx.fillRect(ox + dw / 2 - HANDLE / 2, (c === 'crop-top' ? oy : oy + dh) - HANDLE / 2, HANDLE, HANDLE); ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.strokeRect(ox + dw / 2 - HANDLE / 2, (c === 'crop-top' ? oy : oy + dh) - HANDLE / 2, HANDLE, HANDLE) }
-    if (ct > 0 || config.overlayCropTop === 0) hc('crop-top')
-    if (cb > 0 || config.overlayCropBottom === 0) hc('crop-bottom')
-    ctx.restore()
-  }
+  // Overlay na frente: desenha overlay depois do vídeo (padrão)
+  if (!config.overlayBehind) drawOverlay()
 
   // ── Texts ──
   for (let i = 0; i < config.texts.length; i++) {
@@ -208,10 +215,21 @@ export function EditorCanvas({ videoUrl, overlayUrl, config, onChange, selectedT
 
     // Check overlay crop handles
     const o = getOverlayRect()
-    if (o) {
-      if (my >= o.oy - 6 && my <= o.oy + 6 && mx >= o.ox + o.dw / 2 - 10 && mx <= o.ox + o.dw / 2 + 10) { startDrag('crop-top', e.clientX, e.clientY); return }
-      if (my >= o.oy + o.dh - 6 && my <= o.oy + o.dh + 6 && mx >= o.ox + o.dw / 2 - 10 && mx <= o.ox + o.dw / 2 + 10) { startDrag('crop-bottom', e.clientX, e.clientY); return }
-      if (mx >= o.ox && mx <= o.ox + o.dw && my >= o.oy && my <= o.oy + o.dh) { startDrag('overlay', e.clientX, e.clientY); return }
+
+    // Quando a overlay está atrás do vídeo, prioriza o vídeo nos cliques sobrepostos.
+    const handleOverlayProps = () => {
+      if (!o) return false
+      if (my >= o.oy - 6 && my <= o.oy + 6 && mx >= o.ox + o.dw / 2 - 10 && mx <= o.ox + o.dw / 2 + 10) { startDrag('crop-top', e.clientX, e.clientY); return true }
+      if (my >= o.oy + o.dh - 6 && my <= o.oy + o.dh + 6 && mx >= o.ox + o.dw / 2 - 10 && mx <= o.ox + o.dw / 2 + 10) { startDrag('crop-bottom', e.clientX, e.clientY); return true }
+      if (mx >= o.ox && mx <= o.ox + o.dw && my >= o.oy && my <= o.oy + o.dh) { startDrag('overlay', e.clientX, e.clientY); return true }
+      return false
+    }
+
+    if (config.overlayBehind) {
+      if (videoLoaded) { startDrag('video', e.clientX, e.clientY); return }
+      if (handleOverlayProps()) return
+    } else {
+      if (handleOverlayProps()) return
     }
     if (videoLoaded) startDrag('video', e.clientX, e.clientY)
   }, [config, videoLoaded, startDrag, getOverlayRect, onSelectText])

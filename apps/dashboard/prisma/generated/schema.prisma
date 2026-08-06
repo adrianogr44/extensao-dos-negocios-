@@ -1,0 +1,383 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "/home/gosantos/projects/postreels-v2/apps/dashboard/prisma/generated"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Profile {
+  id        String   @id @default(uuid())
+  platform  Platform @default(INSTAGRAM)
+  username  String
+  fullName  String?
+  avatarUrl String?
+  overlayId String?
+  overlay   Overlay? @relation(fields: [overlayId], references: [id])
+  nicheId   String
+  niche     Niche    @relation(fields: [nicheId], references: [id], onDelete: Cascade)
+  videos    Video[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([nicheId, platform, username])
+}
+
+model Niche {
+  id        String    @id @default(uuid())
+  nome      String    @unique
+  cor       String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  videos    Video[]
+  profiles  Profile[]
+  overlays  Overlay[]
+}
+
+model Video {
+  id               String      @id @default(uuid())
+  filename         String
+  minioKey         String
+  minioBucket      String      @default("videos")
+  thumbnail        String?
+  status           Status      @default(downloaded)
+  errorMsg         String?
+  durationMs       Int?
+  width            Int?
+  height           Int?
+  sizeBytes        BigInt?
+  caption          String?
+  generatedCaption String?
+  platform         Platform    @default(INSTAGRAM)
+  nicheId          String
+  niche            Niche       @relation(fields: [nicheId], references: [id], onDelete: Cascade)
+  profileId        String?
+  profile          Profile?    @relation(fields: [profileId], references: [id])
+  editConfig       Json?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  editConfigs      EditConfig?
+  renderJobs       RenderJob[]
+}
+
+enum Status {
+  downloaded
+  processing
+  completed
+  error
+}
+
+model Overlay {
+  id          String       @id @default(uuid())
+  filename    String
+  minioKey    String
+  width       Int
+  height      Int
+  nicheId     String?
+  niche       Niche?       @relation(fields: [nicheId], references: [id], onDelete: SetNull)
+  isDefault   Boolean      @default(false)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  profiles    Profile[]
+  editConfigs EditConfig[]
+
+  @@index([nicheId])
+  @@index([isDefault])
+}
+
+model EditConfig {
+  id                String   @id @default(uuid())
+  videoId           String   @unique
+  video             Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  overlayId         String?
+  overlay           Overlay? @relation(fields: [overlayId], references: [id], onDelete: SetNull)
+  overlayBehind     Boolean  @default(false)
+  posX              Int      @default(0)
+  posY              Int      @default(0)
+  scale             Float    @default(1.0)
+  zoom              Float    @default(1.0)
+  volume            Float    @default(1.0)
+  rotation          Float    @default(0)
+  overlayX          Int      @default(0)
+  overlayY          Int      @default(0)
+  overlayCropTop    Int      @default(0)
+  overlayCropBottom Int      @default(0)
+  opacity           Float    @default(1.0)
+  cropTop           Int      @default(0)
+  cropBottom        Int      @default(0)
+  bgColor           String   @default("#000000")
+  cropColor         String   @default("#000000")
+  cropOpacity       Float    @default(1.0)
+  speed             Float    @default(1.0)
+  mirror            Boolean  @default(false)
+  eqEnabled         Boolean  @default(false)
+  eqBrightness      Float    @default(1.0)
+  eqContrast        Float    @default(1.0)
+  eqSaturation      Float    @default(1.0)
+  grain             Boolean  @default(false)
+  grainAmount       Float    @default(0.0)
+  frameDrop         Boolean  @default(false)
+  zoomBreathing     Boolean  @default(false)
+  zoomBreathAmount  Float    @default(0.0)
+  texts             Json?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model RenderJob {
+  id           String       @id @default(uuid())
+  videoId      String
+  video        Video        @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  status       RenderStatus @default(queued)
+  progress     Int          @default(0)
+  outputKey    String?
+  errorMessage String?
+  batchId      String?
+  createdAt    DateTime     @default(now())
+  startedAt    DateTime?
+  finishedAt   DateTime?
+}
+
+enum Platform {
+  INSTAGRAM
+  FACEBOOK
+  YOUTUBE
+}
+
+enum RenderStatus {
+  queued
+  processing
+  completed
+  error
+  cancelled
+}
+
+// ============ META SCHEDULER ============
+
+model MetaAccount {
+  id     String  @id @default(cuid())
+  userId String? // Para futura integração com User model
+
+  // Meta IDs
+  facebookPageId     String
+  instagramAccountId String?
+
+  // Access Token (criptografado via middleware)
+  accessToken    String    @db.Text
+  tokenExpiresAt DateTime?
+  refreshToken   String?   @db.Text
+
+  // Account info
+  pageName          String
+  pageUsername      String?
+  profilePictureUrl String?
+
+  // Status
+  isActive     Boolean   @default(true)
+  connectedAt  DateTime  @default(now())
+  lastSyncedAt DateTime?
+
+  // Relations
+  publications    Publication[]
+  facebookSession FacebookSession?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([facebookPageId])
+  @@index([userId])
+  @@index([isActive])
+}
+
+model PublicationTemplate {
+  id     String  @id @default(cuid())
+  userId String?
+
+  name        String
+  description String   @db.Text
+  hashtags    String // JSON array serialized: ["#trend", "#viral"]
+  platforms   String[] @default(["FACEBOOK", "INSTAGRAM"])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  publications Publication[]
+
+  @@index([userId])
+}
+
+model Publication {
+  id               String          @id @default(cuid())
+  metaAccountId    String?
+  metaAccount      MetaAccount?    @relation(fields: [metaAccountId], references: [id], onDelete: Cascade)
+  tiktokAccountId  String?
+  tiktokAccount    TiktokAccount?  @relation(fields: [tiktokAccountId], references: [id], onDelete: Cascade)
+  youtubeAccountId String?
+  youtubeAccount   YoutubeAccount? @relation(fields: [youtubeAccountId], references: [id], onDelete: Cascade)
+
+  videoId String
+  // video            Video     @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  templateId String?
+  template   PublicationTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+
+  // Conteúdo
+  description String   @db.Text
+  hashtags    String   @db.Text // JSON array: ["#trend"]
+  platforms   String[] @default(["FACEBOOK", "INSTAGRAM"])
+
+  // Agendamento
+  scheduledFor DateTime
+  publishedAt  DateTime?
+
+  // Status: DRAFT, SCHEDULED, PUBLISHED, FAILED
+  status String @default("DRAFT")
+
+  // Método de publicação: "API" (Graph API) | "SCRAPE" (Playwright)
+  method String @default("API")
+
+  // Meta response
+  metaPostId      String?
+  metaInsightsUrl String?
+
+  // Erro
+  errorMessage String?   @db.Text
+  errorCode    String?
+  retryCount   Int       @default(0)
+  lastRetryAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  logs PublicationLog[]
+
+  @@unique([videoId, metaAccountId, scheduledFor])
+  @@index([metaAccountId])
+  @@index([tiktokAccountId])
+  @@index([youtubeAccountId])
+  @@index([status])
+  @@index([scheduledFor])
+  @@index([videoId])
+}
+
+model FacebookSession {
+  id            String       @id @default(cuid())
+  metaAccountId String?      @unique
+  metaAccount   MetaAccount? @relation(fields: [metaAccountId], references: [id])
+
+  encryptedCookies String    @db.Text
+  status           String    @default("active") // active | expired | requires_login
+  loggedInAs       String?
+  fbUserId         String?
+  lastUsedAt       DateTime?
+  expiresAt        DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([status])
+}
+
+model PublicationLog {
+  id            String      @id @default(cuid())
+  publicationId String
+  publication   Publication @relation(fields: [publicationId], references: [id], onDelete: Cascade)
+
+  action       String // SCHEDULED, PUBLISHED, FAILED, RETRY
+  metaResponse String? @db.Text
+
+  createdAt DateTime @default(now())
+
+  @@index([publicationId])
+  @@index([createdAt])
+}
+
+// ============ TIKTOK SCRAPE PUBLISHER ============
+
+model TiktokAccount {
+  id     String  @id @default(cuid())
+  userId String?
+
+  // Identificação da conta TikTok
+  username          String
+  displayName       String?
+  profilePictureUrl String?
+
+  // Status
+  isActive     Boolean   @default(true)
+  connectedAt  DateTime  @default(now())
+  lastSyncedAt DateTime?
+
+  // Relations
+  publications  Publication[]
+  tiktokSession TiktokSession?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([username])
+  @@index([userId])
+  @@index([isActive])
+}
+
+model TiktokSession {
+  id              String         @id @default(cuid())
+  tiktokAccountId String?        @unique
+  tiktokAccount   TiktokAccount? @relation(fields: [tiktokAccountId], references: [id])
+
+  encryptedCookies String    @db.Text
+  status           String    @default("active") // active | expired | requires_login
+  loggedInAs       String?
+  ttUserId         String?
+  lastUsedAt       DateTime?
+  expiresAt        DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([status])
+}
+
+// ============ YOUTUBE SCRAPE PUBLISHER ============
+
+model YoutubeAccount {
+  id     String  @id @default(cuid())
+  userId String?
+
+  // Identificação do canal
+  channelName       String
+  channelId         String?
+  profilePictureUrl String?
+
+  // Status
+  isActive     Boolean   @default(true)
+  connectedAt  DateTime  @default(now())
+  lastSyncedAt DateTime?
+
+  // Relations
+  publications   Publication[]
+  youtubeSession YoutubeSession?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([isActive])
+}
+
+model YoutubeSession {
+  id               String          @id @default(cuid())
+  youtubeAccountId String?         @unique
+  youtubeAccount   YoutubeAccount? @relation(fields: [youtubeAccountId], references: [id])
+
+  encryptedCookies String    @db.Text
+  status           String    @default("active") // active | expired | requires_login
+  loggedInAs       String?
+  googleUserId     String?
+  lastUsedAt       DateTime?
+  expiresAt        DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([status])
+}

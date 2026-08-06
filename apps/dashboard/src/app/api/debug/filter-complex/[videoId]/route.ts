@@ -12,7 +12,7 @@ export async function GET(_req: Request, { params }: { params: { videoId: string
     return NextResponse.json({ error: 'No edit config' }, { status: 404 })
   }
 
-  const args = buildOverlayFilter({
+  const args = await buildOverlayFilter({
     inputVideo: '/tmp/input.mp4',
     inputOverlay: '/tmp/overlay.png',
     outputPath: '/tmp/output.mp4',
@@ -21,6 +21,7 @@ export async function GET(_req: Request, { params }: { params: { videoId: string
       posY: video.editConfigs.posY,
       scale: video.editConfigs.scale,
       zoom: video.editConfigs.zoom,
+      rotation: video.editConfigs.rotation ?? 0,
     },
     overlay: {
       posX: video.editConfigs.overlayX,
@@ -30,6 +31,8 @@ export async function GET(_req: Request, { params }: { params: { videoId: string
       opacity: video.editConfigs.opacity,
     },
     volume: video.editConfigs.volume,
+    overlayBehind: video.editConfigs.overlayBehind ?? false,
+    videoDurationMs: video.durationMs,
     cropTop: video.editConfigs.cropTop || 0,
     cropBottom: video.editConfigs.cropBottom || 0,
     bgColor: video.editConfigs.bgColor || '#000000',
@@ -37,6 +40,17 @@ export async function GET(_req: Request, { params }: { params: { videoId: string
     cropOpacity: video.editConfigs.cropOpacity ?? 1,
     speed: video.editConfigs.speed ?? 1,
     mirror: video.editConfigs.mirror ?? false,
+    eq: video.editConfigs.eqEnabled
+      ? {
+          brightness: video.editConfigs.eqBrightness ?? 1,
+          contrast: video.editConfigs.eqContrast ?? 1,
+          saturation: video.editConfigs.eqSaturation ?? 1,
+        }
+      : undefined,
+    grain: video.editConfigs.grain ? { amount: video.editConfigs.grainAmount ?? 0 } : undefined,
+    frameDrop: video.editConfigs.frameDrop ? { frames: 1 } : undefined,
+    zoomBreathing: video.editConfigs.zoomBreathing ? { amount: video.editConfigs.zoomBreathAmount ?? 0 } : undefined,
+    inputFps: 30,
     texts: (video.editConfigs.texts as any) || undefined,
   })
 
