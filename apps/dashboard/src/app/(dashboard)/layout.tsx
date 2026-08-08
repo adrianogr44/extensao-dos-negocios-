@@ -31,6 +31,11 @@ const navItems: NavItem[] = [
     icon: <Clock className="w-5 h-5" />,
   },
   {
+    label: 'Enviar p/ Editor',
+    href: '/upload',
+    icon: <FileText className="w-5 h-5" />,
+  },
+  {
     label: 'Nichos',
     href: '/nichos',
     icon: <FileText className="w-5 h-5" />,

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { VideoGrid } from '@/components/videos/VideoGrid'
+import { VideoUpload } from '@/components/videos/VideoUpload'
 
 interface Overlay {
   id: string
@@ -159,6 +160,12 @@ export default function ProfileVideosPage() {
       </div>
 
       <div className="flex items-center gap-2">
+        <VideoUpload
+          nicheId={profile.nicheId}
+          profileId={profile.id}
+          platform={profile.platform}
+          onUploaded={() => { load(); router.refresh() }}
+        />
         <Button
           size="sm"
           variant="default"

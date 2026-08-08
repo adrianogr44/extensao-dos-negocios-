@@ -12,7 +12,7 @@ export async function POST(req: Request) {
     const body = await req.json()
     const parsed = schema.safeParse(body)
     if (!parsed.success) {
-      return NextResponse.json({ success: false, error: parsed.error.flatten() }, { status: 400 })
+      return NextResponse.json({ success: false, error: parsed.error.issues[0]?.message || 'Dados inválidos' }, { status: 400 })
     }
 
     const account = await prisma.tiktokAccount.findUnique({

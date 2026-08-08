@@ -1,6 +1,6 @@
 generator client {
   provider = "prisma-client-js"
-  output   = "/home/gosantos/projects/postreels-v2/apps/dashboard/prisma/generated"
+  output   = "./generated"
 }
 
 datasource db {

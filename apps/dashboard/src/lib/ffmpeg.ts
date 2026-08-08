@@ -35,6 +35,11 @@ function getDefaultFont() {
 
 const FONT_PATH = process.env.FFMPEG_FONT_PATH || getDefaultFont()
 
+// drawtext no Windows: o ':' do drive (C:) e as barras invertidas precisam
+// de escape no filter_complex, senão o ffmpeg interpreta como separador de opção.
+// Testado: somente `C\\:/path` (barra dupla) é aceito pelo parser do filtergraph.
+const FONT_PATH_ESCAPED = FONT_PATH.replace(/\\/g, '/').replace(/:/g, '\\\\:')
+
 export interface FfmpegProgress {
   percent: number
   fps: number
@@ -222,22 +227,33 @@ export async function buildOverlayFilter(params: {
   let currentLabel = 'comp'
 
   if (texts && texts.length > 0) {
+    // drawtext não renderiza quebra de linha (\n) — o caracter U+000A vira um
+    // glifo .notdef (a "caixa" com o caractere). Cada linha vira um drawtext
+    // próprio com offset de y, igual ao preview do canvas (lineHeight = 1.3x).
     let textChain = `[${currentLabel}]`
+    let drewAny = false
     for (const t of texts) {
       if (!t.content) continue
 
-      const escaped = t.content
-        .replace(/\\/g, '\\\\')
-        .replace(/:/g, '\\:')
-        .replace(/,/g, '\\,')
-        .replace(/\[/g, '\\[')
-        .replace(/\]/g, '\\]')
-        .replace(/=/g, '\\=')
-      textChain += `drawtext=text='${escaped}':x=${t.x}:y=${t.y}:fontsize=${t.fontSize}:fontcolor=${t.color}:fontfile=${FONT_PATH},`
+      const lineHeight = Math.round(t.fontSize * 1.3)
+      const lines = t.content.split('\n')
+      lines.forEach((line, li) => {
+        const escaped = line
+          .replace(/\\/g, '\\\\')
+          .replace(/:/g, '\\:')
+          .replace(/,/g, '\\,')
+          .replace(/\[/g, '\\[')
+          .replace(/\]/g, '\\]')
+          .replace(/=/g, '\\=')
+        textChain += `drawtext=text='${escaped}':x=${t.x}:y=${t.y + li * lineHeight}:fontsize=${t.fontSize}:fontcolor=${t.color}:fontfile=${FONT_PATH_ESCAPED},`
+        drewAny = true
+      })
     }
-    textChain = textChain.slice(0, -1) + '[texted]'
-    filters.push(textChain)
-    currentLabel = 'texted'
+    if (drewAny) {
+      textChain = textChain.slice(0, -1) + '[texted]'
+      filters.push(textChain)
+      currentLabel = 'texted'
+    }
   }
 
   // OUTPUT CHAIN
@@ -336,7 +352,9 @@ export async function renderVideo(args: string[], onProgress?: (p: FfmpegProgres
 ${fc.substring(0, 200)}`)
     // Escrever em arquivo para debug
     const { writeFileSync } = await import('fs')
-    writeFileSync('/tmp/filter_complex_debug.txt', fc, 'utf-8')
+    const { tmpdir } = await import('os')
+    const { join } = await import('path')
+    writeFileSync(join(tmpdir(), 'filter_complex_debug.txt'), fc, 'utf-8')
   }
   console.log(`[renderVideo] Iniciando FFmpeg com comando:
 ffmpeg ${args.join(' ')}`)

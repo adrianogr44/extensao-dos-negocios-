@@ -62,7 +62,7 @@ export async function POST(req: Request, { params }: { params: { profileId: stri
 
   const parsed = replicateSchema.safeParse(clean)
   if (!parsed.success) {
-    return NextResponse.json({ success: false, error: parsed.error.flatten() }, { status: 400 })
+    return NextResponse.json({ success: false, error: parsed.error.issues[0]?.message || 'Dados inválidos' }, { status: 400 })
   }
 
   const profile = await prisma.profile.findUnique({

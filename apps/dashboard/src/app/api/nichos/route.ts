@@ -24,7 +24,11 @@ export async function POST(req: Request) {
   const body = await req.json()
   const parsed = createNicheSchema.safeParse(body)
   if (!parsed.success) {
-    return NextResponse.json({ success: false, error: parsed.error.flatten() }, { status: 400 })
+    const first = parsed.error.issues[0]
+    return NextResponse.json({
+      success: false,
+      error: first ? `${first.path.join('.')}: ${first.message}` : 'Dados inválidos',
+    }, { status: 400 })
   }
   const niche = await prisma.niche.create({ data: parsed.data })
   return NextResponse.json({ success: true, data: niche }, { status: 201 })

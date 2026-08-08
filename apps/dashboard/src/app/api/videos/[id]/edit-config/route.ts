@@ -45,7 +45,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
   const body = await req.json()
   const parsed = editConfigSchema.safeParse(body)
   if (!parsed.success) {
-    return NextResponse.json({ success: false, error: parsed.error.flatten() }, { status: 400 })
+    return NextResponse.json({ success: false, error: parsed.error.issues[0]?.message || 'Dados inválidos' }, { status: 400 })
   }
 
   const config = await prisma.editConfig.upsert({

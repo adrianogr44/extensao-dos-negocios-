@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { Platform } from '@prisma/client'
 import { NicheOverlayManager } from '@/components/overlays/NicheOverlayManager'
+import { CreateProfileForm } from '@/components/profiles/CreateProfileForm'
 
 const platformMeta: Record<Platform, { label: string, color: string }> = {
   INSTAGRAM: { label: 'IG', color: '#e1306c' },
@@ -40,6 +41,8 @@ export default async function NicheProfilesPage({ params }: PageProps) {
       {niche.profiles.length === 0 && (
         <p className="text-sm text-zinc-500 italic">Nenhum perfil vinculado a este nicho ainda.</p>
       )}
+
+      <CreateProfileForm nicheId={niche.id} />
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {niche.profiles.map(profile => (

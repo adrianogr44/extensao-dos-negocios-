@@ -4,6 +4,11 @@ export default defineConfig({
   browser: 'chrome',
   manifestVersion: 3,
   modules: ['@wxt-dev/module-react'],
+  dev: {
+    server: {
+      port: 3001,
+    },
+  },
   manifest: {
     name: 'PostReels Downloader',
     version: '0.1.0',
