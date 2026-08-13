@@ -4,7 +4,13 @@
   "version": "1.0",
   "description": "Baixa todos os Reels de um perfil do Instagram diretamente pelo navegador.",
   "permissions": ["downloads", "storage", "scripting", "tabs"],
-  "host_permissions": ["*://*.instagram.com/*"],
+  "host_permissions": [
+    "*://*.instagram.com/*",
+    "*://*.youtube.com/*",
+    "*://*.tiktok.com/*",
+    "*://*.googlevideo.com/*",
+    "*://*.tiktokcdn.com/*"
+  ],
   "background": {
     "service_worker": "background.js"
   },
@@ -18,6 +24,6 @@
   },
   "web_accessible_resources": [{
     "resources": ["content.js"],
-    "matches": ["*://*.instagram.com/*"]
+    "matches": ["*://*.instagram.com/*", "*://*.youtube.com/*", "*://*.tiktok.com/*"]
   }]
 }

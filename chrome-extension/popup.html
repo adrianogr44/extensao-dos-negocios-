@@ -23,15 +23,24 @@
 </head>
 <body>
   <h1>📦 Fábrica de Reels</h1>
-  <p class="sub">Baixa todos os Reels de um perfil do Instagram</p>
+  <p class="sub">Baixa Reels do Instagram, Shorts do YouTube e vídeos do TikTok</p>
 
-  <label for="url">Link do perfil ou username</label>
+  <label for="platform">Plataforma</label>
+  <select id="platform">
+    <option value="instagram">Instagram — Reels de um perfil</option>
+    <option value="youtube">YouTube — Shorts / vídeo</option>
+    <option value="tiktok">TikTok — vídeo</option>
+  </select>
+
+  <label for="url">Link do perfil ou vídeo</label>
   <input type="text" id="url" placeholder="https://www.instagram.com/vovoteodoro/" autofocus>
 
-  <label for="limit">Máximo de reels (0 = baixar <strong>todos</strong>)</label>
-  <input type="number" id="limit" value="0" min="0">
+  <div id="limitWrap">
+    <label for="limit">Máximo de reels (0 = baixar <strong>todos</strong>)</label>
+    <input type="number" id="limit" value="0" min="0">
+  </div>
 
-  <button id="btn">🔽 Baixar Reels</button>
+  <button id="btn">🔽 Baixar</button>
 
   <div class="progress" id="progressBar"><div id="progressFill"></div></div>
   <div class="status" id="status"></div>

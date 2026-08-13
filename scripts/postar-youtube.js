@@ -19,7 +19,7 @@ try {
 
 const QUEUE_FILE = path.join(__dirname, 'posts-queue.json');
 const DEBUG_PORT = parseInt(process.env.CHROME_DEBUG_PORT) || 9222;
-const YOUTUBE_CAPTION = process.env.YOUTUBE_CAPTION || process.env.SHORTS_CAPTION || '#futebol #football #futebolbrasileiro #Shorts #gol #jogadas';
+const YOUTUBE_CAPTION = process.env.YOUTUBE_CAPTION || process.env.SHORTS_CAPTION || '#futebol #football #soccer #futboledit #shorts';
 
 function loadQueue() {
   if (!fs.existsSync(QUEUE_FILE)) { console.log('Fila vazia.'); process.exit(0); }

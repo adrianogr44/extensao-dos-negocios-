@@ -165,6 +165,19 @@ body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg)
 .filter-btn:hover{background:var(--surface2)}
 .filter-btn.active{background:var(--surface3);color:var(--text);border-color:var(--text3)}
 
+/* Ambientes (Futebol/Motivacao) */
+.amb-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;margin-bottom:20px}
+.amb-card{background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);overflow:hidden}
+.amb-header{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--border);font-size:14px;font-weight:700}
+.amb-body{padding:12px 16px}
+.amb-row{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px}
+.amb-row:last-child{border:none}
+.amb-row .label{color:var(--text2);white-space:nowrap}
+.amb-row .value{color:var(--text);text-align:right;word-break:break-all;font-family:monospace}
+.amb-platforms{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.amb-platforms span{padding:3px 10px;border:1px solid var(--border);border-radius:999px;font-size:11px;color:var(--text2)}
+.amb-actions{display:flex;gap:8px;padding:10px 16px;border-top:1px solid var(--border);flex-wrap:wrap}
+
 @media(max-width:768px){
   .sidebar{display:none}
   .content{padding:16px}
@@ -213,10 +226,49 @@ body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg)
         <span class="next">Proximo: <span id="nextRun">-</span></span>
       </div>
 
+<div class="amb-grid">
+        <div class="amb-card">
+          <div class="amb-header">&#9917; FUTEBOL</div>
+          <div class="amb-body">
+            <div class="amb-row"><span class="label">Chrome Profile</span><span class="value">chrome-debug-profile</span></div>
+            <div class="amb-row"><span class="label">Porta CDP</span><span class="value">9222</span></div>
+            <div class="amb-row"><span class="label">Pasta de videos</span><span class="value">C:\Users\adria\Downloads\videos editados fut</span></div>
+            <div class="amb-row"><span class="label">Queue</span><span class="value">posts-queue.json</span></div>
+            <div class="amb-row"><span class="label">Lock</span><span class="value">.posting.lock</span></div>
+            <div class="amb-row"><span class="label">Debug</span><span class="value">videos&#92;debug</span></div>
+            <div class="amb-row"><span class="label">Kwai</span><span class="value">Configuracao atual</span></div>
+            <div class="amb-row"><span class="label">Scheduler</span><span class="value">11:30 / 18:30</span></div>
+            <div class="amb-row"><span class="label">Timezone</span><span class="value">America/Sao_Paulo</span></div>
+            <div class="amb-platforms"><span>Instagram</span><span>TikTok</span><span>Facebook</span><span>YouTube Shorts</span></div>
+          </div>
+          <div class="amb-actions">
+            <button class="btn btn-outline" onclick="openChrome('futebol')">&#127760; Abrir Chrome Futebol</button>
+          </div>
+        </div>
+        <div class="amb-card">
+          <div class="amb-header">&#127916; MOTIVACAO</div>
+          <div class="amb-body">
+            <div class="amb-row"><span class="label">Chrome Profile</span><span class="value">chrome-debug-profile-motivacao</span></div>
+            <div class="amb-row"><span class="label">Porta CDP</span><span class="value">9223</span></div>
+            <div class="amb-row"><span class="label">Pasta de videos</span><span class="value">C:\Users\adria\Downloads\videos editados motiv</span></div>
+            <div class="amb-row"><span class="label">Queue</span><span class="value">posts-queue-motivacao.json</span></div>
+            <div class="amb-row"><span class="label">Lock</span><span class="value">.posting-motivacao.lock</span></div>
+            <div class="amb-row"><span class="label">Debug</span><span class="value">fb_debug-motivacao</span></div>
+            <div class="amb-row"><span class="label">Kwai</span><span class="value" style="color:#f87171">Desativado</span></div>
+            <div class="amb-row"><span class="label">Scheduler</span><span class="value">12:00 / 19:00</span></div>
+            <div class="amb-row"><span class="label">Timezone</span><span class="value">America/Sao_Paulo</span></div>
+            <div class="amb-platforms"><span>TikTok</span><span>Facebook Reels</span></div>
+          </div>
+          <div class="amb-actions">
+            <button class="btn btn-outline" onclick="openChrome('motivacao')">&#127760; Abrir Chrome Motivacao</button>
+          </div>
+        </div>
+      </div>
+
       <div class="actions">
         <button class="btn btn-primary" id="btnRun">&#9654; Executar Agora</button>
         <button class="btn btn-danger" id="btnStop" disabled>&#9632; Parar</button>
-        <button class="btn btn-outline" onclick="openChrome()">&#127760; Abrir Chrome</button>
+        <button class="btn btn-outline" onclick="openChrome('futebol')">&#127760; Abrir Chrome</button>
         <button class="btn btn-outline" onclick="resetPosted()">&#8635; Zerar Postados</button>
         <button class="btn btn-outline" onclick="resetDaily()">&#128197; Zerar Hoje</button>
         <button class="btn btn-outline" onclick="resetErrors()">&#10003; Zerar Erros</button>
@@ -227,7 +279,11 @@ body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg)
     <div class="panel" id="panel-videos">
       <div class="queue-header">
         <h3>Fila de Videos</h3>
-        <span class="count"><strong id="videoCount">0</strong> videos</span>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <span class="videos-dir" id="videosDir" title="" style="font-size:11px;color:var(--text3);max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Carregando pasta...</span>
+          <button class="btn btn-sm btn-outline" onclick="changeVideosDir()">&#128193; Trocar Pasta</button>
+          <span class="count"><strong id="videoCount">0</strong> videos</span>
+        </div>
       </div>
       <div class="filter-bar" id="filterBar">
         <button class="filter-btn active" data-filter="all">Todos</button>
@@ -266,6 +322,7 @@ let statsInterval = null;
 let eventSource = null;
 let currentFilter = 'all';
 let currentQueue = { videos: [] };
+let currentVideosDir = '';
 
 function fmtTime(d) {
   return d.toLocaleTimeString('pt-BR', { hour12: false });
@@ -493,6 +550,39 @@ async function resetSchedule() {
   }
 }
 
+async function loadVideosDir() {
+  try {
+    const d = await fetchJson(BASE + '/api/videos-dir');
+    currentVideosDir = d.dir;
+    const el = document.getElementById('videosDir');
+    el.textContent = d.dir;
+    el.title = d.dir;
+  } catch {}
+}
+
+async function changeVideosDir() {
+  const dir = prompt('Digite o caminho da pasta de videos:\n(ex: C:\\Users\\voce\\Downloads\\FabricaReels)', currentVideosDir || '');
+  if (!dir || !dir.trim()) return;
+  try {
+    const r = await fetch(BASE + '/api/videos-dir', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dir: dir.trim() }),
+    });
+    const data = await r.json();
+    if (data.ok) {
+      addLog('system', 'Pasta de videos alterada: ' + data.dir + ' (' + data.count + ' videos)');
+      loadVideosDir();
+      loadQueue();
+      loadStats();
+    } else {
+      alert(data.error || 'Nao foi possivel trocar a pasta');
+    }
+  } catch (e) {
+    alert('Erro ao trocar pasta: ' + e.message);
+  }
+}
+
 async function loadQueue() {
   try {
     currentQueue = await fetchJson(BASE + '/api/queue');
@@ -557,8 +647,8 @@ async function stopScript() {
   try { await fetch(BASE + '/api/stop', { method: 'POST' }); } catch {}
 }
 
-async function openChrome() {
-  try { await fetch(BASE + '/api/chrome', { method: 'POST' }); } catch {}
+async function openChrome(profile) {
+  try { await fetch(BASE + '/api/chrome?profile=' + (profile || 'futebol'), { method: 'POST' }); } catch {}
 }
 
 async function resetPosted() {
@@ -648,6 +738,7 @@ connectSSE();
 loadStats();
 loadSchedule();
 loadQueue();
+loadVideosDir();
 statsInterval = setInterval(() => { if (!isRunning) { loadStats(); loadQueue(); } }, 5000);
 
 window.addEventListener('beforeunload', () => {

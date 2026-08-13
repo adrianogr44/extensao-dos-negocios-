@@ -64,7 +64,7 @@ async function deleteVideoFile(videoPath) {
 }
 
 function getDefaultCaption() {
-  return process.env.TIKTOK_CAPTION || '#futebol #football #futebolbrasileiro #fyp #foryou #gol #jogada #ronaldo';
+  return process.env.TIKTOK_CAPTION || '#futebol #football #soccer #futboledit #futebolbrasileiro #foryou #footballtiktok #foryou';
 }
 
 async function postToTikTok(page, videoPath, caption) {

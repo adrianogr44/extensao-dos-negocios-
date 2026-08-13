@@ -13,10 +13,10 @@ export default function SettingsPage() {
   const fileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    setOpenaiKey(localStorage.getItem('OPENAI_API_KEY') || '')
     fetch('/api/instagram/cookies')
       .then(r => r.json())
       .then(d => {
+        setOpenaiKey(localStorage.getItem('OPENAI_API_KEY') || '')
         if (d.filename) setCookiesStatus(`Cookies carregados (${(d.size / 1024).toFixed(1)} KB)`)
         else setCookiesStatus(null)
       })
@@ -150,11 +150,17 @@ export default function SettingsPage() {
         </p>
         <ol className="list-inside list-decimal space-y-1 text-sm text-zinc-300">
           <li>Abra <code className="text-purple-400 bg-zinc-800 px-1 rounded">chrome://extensions</code></li>
-          <li>Ative "Modo do desenvolvedor" (canto superior direito)</li>
-          <li>Clique em "Carregar sem compactacao"</li>
+          <li>Ative &quot;Modo do desenvolvedor&quot; (canto superior direito)</li>
+          <li>Clique em &quot;Carregar sem compactacao&quot;</li>
           <li>Selecione a pasta <code className="text-purple-400 bg-zinc-800 px-1 rounded">chrome-extension</code> do projeto</li>
-          <li>Va para o Instagram, abra um perfil, clique na extensao e depois em "Baixar Reels"</li>
+          <li>Va para o Instagram, abra um perfil, clique na extensao e depois em &quot;Baixar Reels&quot;</li>
         </ol>
+        <a
+          href="/extensao"
+          className="inline-block rounded-lg border border-amber-400/40 px-4 py-2 text-sm text-amber-300 hover:bg-amber-900/20 transition-colors"
+        >
+          Ver recursos da extensão →
+        </a>
       </div>
 
       <button

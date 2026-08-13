@@ -19,13 +19,74 @@ try {
   }
 } catch (e) {}
 
-const PORT = 3939;
+const PORT = 3940;
 const QUEUE_FILE = path.join(__dirname, 'posts-queue.json');
 const HTML_FILE = path.join(__dirname, 'posting-studio.html');
 const SCHEDULE_CONFIG_FILE = path.join(__dirname, 'schedule-config.json');
 const ANALYTICS_DATA_FILE = path.join(__dirname, 'analytics-data.json');
-const REELS_VIDEO_DIR = process.env.VIDEOS_DIR || path.join(require('os').homedir(), 'Downloads', 'FabricaReels');
+const VIDEOS_DIR_FILE = path.join(__dirname, 'videos-dir.json');
+const DEFAULT_VIDEOS_DIR = process.env.VIDEOS_DIR || path.join(require('os').homedir(), 'Downloads', 'FabricaReels');
 const STUDIO_SCHEDULER_DISABLED = process.env.STUDIO_SCHEDULER_DISABLED === 'true';
+
+function loadVideosDir() {
+  try {
+    const data = JSON.parse(fs.readFileSync(VIDEOS_DIR_FILE, 'utf-8'));
+    if (data.dir && fs.existsSync(data.dir) && fs.statSync(data.dir).isDirectory()) return data.dir;
+  } catch {}
+  return DEFAULT_VIDEOS_DIR;
+}
+
+function saveVideosDir(dir) {
+  fs.writeFileSync(VIDEOS_DIR_FILE, JSON.stringify({ dir }, null, 2));
+}
+
+let REELS_VIDEO_DIR = loadVideosDir();
+
+function naturalSortVideo(a, b) {
+  const na = parseInt(a.match(/_(\d+)\.mp4$/)?.[1] || '0', 10);
+  const nb = parseInt(b.match(/_(\d+)\.mp4$/)?.[1] || '0', 10);
+  return na - nb;
+}
+
+function rebuildQueueFromDir() {
+  const files = fs.readdirSync(REELS_VIDEO_DIR).filter(f => f.endsWith('.mp4')).sort(naturalSortVideo);
+  let old = { videos: [], lastPostDate: '' };
+  try {
+    if (fs.existsSync(QUEUE_FILE)) old = JSON.parse(fs.readFileSync(QUEUE_FILE, 'utf-8'));
+  } catch {}
+  const byName = {};
+  (old.videos || []).forEach(v => { byName[v.filename] = v; });
+  const videos = files.map(f => {
+    const prev = byName[f];
+    return {
+      path: path.join(REELS_VIDEO_DIR, f),
+      filename: f,
+      postedInstagram: prev ? !!prev.postedInstagram : false,
+      postedTikTok: prev ? !!prev.postedTikTok : false,
+      postedFacebook: prev ? !!prev.postedFacebook : false,
+      postedKwai: prev ? !!prev.postedKwai : false,
+      postedShorts: prev ? !!prev.postedShorts : false,
+      instagramDate: prev ? prev.instagramDate : null,
+      tiktokDate: prev ? prev.tiktokDate : null,
+      facebookDate: prev ? prev.facebookDate : null,
+      kwaiDate: prev ? prev.kwaiDate : null,
+      shortsDate: prev ? prev.shortsDate : null,
+      error: prev ? prev.error : null,
+    };
+  });
+  const queue = {
+    videos,
+    currentIndex: 0,
+    dailyCount: 0,
+    dailyCountTikTok: 0,
+    dailyCountFacebook: 0,
+    dailyCountKwai: 0,
+    dailyCountShorts: 0,
+    lastPostDate: old.lastPostDate || '',
+  };
+  fs.writeFileSync(QUEUE_FILE, JSON.stringify(queue, null, 2));
+  return queue;
+}
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -335,12 +396,19 @@ const server = http.createServer((req, res) => {
   }
 
   if (pathname === '/api/chrome' && req.method === 'POST') {
-    const chromeLauncher = path.join(__dirname, 'launch-chrome.cmd');
+    const url = new URL(req.url, `http://localhost:${PORT}`);
+    const profile = url.searchParams.get('profile') || 'futebol';
+    const chromeLauncher = path.join(__dirname, 'launch-chrome.js');
     if (fs.existsSync(chromeLauncher)) {
-      spawn('cmd', ['/c', 'start', '', chromeLauncher], { shell: true, detached: true }).unref();
-      return sendJson(res, { ok: true });
+      spawn('node', [chromeLauncher, `--profile=${profile}`], {
+        cwd: __dirname,
+        windowsHide: true,
+        stdio: 'ignore',
+        detached: true,
+      }).unref();
+      return sendJson(res, { ok: true, profile });
     }
-    return sendJson(res, { ok: false, error: 'launch-chrome.cmd nao encontrado' });
+    return sendJson(res, { ok: false, error: 'launch-chrome.js nao encontrado' });
   }
 
   if (pathname === '/api/schedule') {
@@ -361,6 +429,35 @@ const server = http.createServer((req, res) => {
         saveScheduleConfig(cfg);
         startScheduler();
         return sendJson(res, { ok: true, config: cfg });
+      } catch (e) {
+        return sendJson(res, { ok: false, error: e.message }, 400);
+      }
+    });
+    return;
+  }
+
+  if (pathname === '/api/videos-dir' && req.method === 'GET') {
+    return sendJson(res, { dir: REELS_VIDEO_DIR });
+  }
+
+  if (pathname === '/api/videos-dir' && req.method === 'POST') {
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', () => {
+      try {
+        const { dir } = JSON.parse(body);
+        if (!dir || typeof dir !== 'string' || !dir.trim()) {
+          return sendJson(res, { ok: false, error: 'Caminho invalido' }, 400);
+        }
+        const resolved = path.resolve(dir.trim());
+        if (!fs.existsSync(resolved) || !fs.statSync(resolved).isDirectory()) {
+          return sendJson(res, { ok: false, error: 'Pasta nao encontrada ou nao e um diretorio' }, 400);
+        }
+        REELS_VIDEO_DIR = resolved;
+        saveVideosDir(resolved);
+        const queue = rebuildQueueFromDir();
+        broadcastLog({ type: 'system', text: `Pasta de videos alterada para: ${resolved} (${queue.videos.length} videos)`, ts: new Date().toISOString() });
+        return sendJson(res, { ok: true, dir: resolved, count: queue.videos.length });
       } catch (e) {
         return sendJson(res, { ok: false, error: e.message }, 400);
       }

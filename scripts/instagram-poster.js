@@ -9,7 +9,7 @@ const CHROME_PATH = process.env.CHROME_PATH || 'C:\\Program Files\\Google\\Chrom
 const DAILY_LIMIT = parseInt(process.env.INSTAGRAM_DAILY_LIMIT) || 5;
 
 function getCaption() {
-  return process.env.INSTAGRAM_CAPTION || '#futebol #football #futebolbrasileiro #futebolarte #gol #jogada #ronaldo';
+  return process.env.INSTAGRAM_CAPTION || '#futebol #football #soccer #futboledit #futebolbrasileiro #futebolmundial #reelsfutebol';
 }
 
 const { chromium } = require('playwright');

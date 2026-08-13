@@ -4,7 +4,7 @@ const { chromium } = require('playwright');
 
 const QUEUE_FILE = path.join(__dirname, 'posts-queue.json');
 const DEBUG_PORT = parseInt(process.env.CHROME_DEBUG_PORT) || 9222;
-const FACEBOOK_CAPTION = process.env.FACEBOOK_CAPTION || '#futebol #football #futebolbrasileiro #futebolarte #gol #jogada';
+const FACEBOOK_CAPTION = process.env.FACEBOOK_CAPTION || '#futebol #football #soccer #futebolbrasileiro #futboledit';
 
 function loadQueue() {
   if (!fs.existsSync(QUEUE_FILE)) { console.log('Fila vazia.'); process.exit(0); }

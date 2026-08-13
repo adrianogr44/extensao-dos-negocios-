@@ -1,6 +1,8 @@
 @echo off
-echo Fechando Chrome existente...
-taskkill /f /im chrome.exe >nul 2>&1
+echo Fechando Chrome do perfil FUTEBOL (9222)...
+REM Mata SOMENTE processos do perfil chrome-debug-profile (futebol),
+REM mantendo abertos o Chrome MOTIVACAO (chrome-debug-profile-motivacao) e o Chrome pessoal.
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0kill-futebol.ps1"
 timeout /t 3 /nobreak >nul
 
 echo Iniciando Chrome com debug remoto na porta 9222...

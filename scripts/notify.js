@@ -7,8 +7,10 @@ function sendMessage(text) {
   const token = BOT_TOKEN();
   const chatId = CHAT_ID();
   if (!token || !chatId) return Promise.resolve(false);
+  const tag = process.env.NOTIFICATION_TAG;
+  const fullText = tag ? `[${tag}] ${text}` : text;
   return new Promise((resolve) => {
-    const data = JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML', disable_web_page_preview: true });
+    const data = JSON.stringify({ chat_id: chatId, text: fullText, parse_mode: 'HTML', disable_web_page_preview: true });
     const req = https.request(
       { hostname: 'api.telegram.org', path: `/bot${token}/sendMessage`, method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) } },
       (res) => { let b = ''; res.on('data', c => b += c); res.on('end', () => resolve(true)); }

@@ -1,11 +1,14 @@
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'DOWNLOAD') {
-    const filename = 'FabricaReels/' + message.filename
-    chrome.downloads.download({
+    const opts = {
       url: message.url,
-      filename: filename,
+      filename: 'FabricaReels/' + message.filename,
       saveAs: false,
-    }, (downloadId) => {
+    }
+    if (Array.isArray(message.headers) && message.headers.length > 0) {
+      opts.headers = message.headers
+    }
+    chrome.downloads.download(opts, (downloadId) => {
       if (chrome.runtime.lastError) {
         sendResponse({ success: false, error: chrome.runtime.lastError.message })
       } else {
