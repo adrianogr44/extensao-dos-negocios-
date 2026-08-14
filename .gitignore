@@ -139,6 +139,35 @@ scripts/dashboard.html
 __pycache__/
 *.pyc
 
+# ========================================
+# Fabrica Reels - Runtime data (never commit)
+# ========================================
+.cache/
+videos/
+debug-*.png
+prisma/dev.db
+
+# Scheduler PIDs
+scripts/.agendador-*.pid
+
+# Posting queues / runtime JSON
+scripts/posts-queue-motivacao.json
+scripts/posts-queue.json.backup-*
+scripts/tendencias-data.json
+scripts/analytics-data.json
+scripts/metrics-data.json
+scripts/videos-dir.json
+src/app/api/chrome/*.json
+
+# Logs & debug output
+scripts/postar-log*.txt
+scripts/manual-run.log.err
+scripts/tendencias-log.txt
+scripts/tendencias-out.txt
+scripts/tendencias-err.txt
+scripts/fb_debug/
+scripts/fb_debug-motivacao/
+
 # Temporary
 tmp/
 temp/

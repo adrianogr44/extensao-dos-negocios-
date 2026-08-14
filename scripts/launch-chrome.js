@@ -28,20 +28,28 @@ function isPortOpen(port, timeoutMs = 1500) {
   });
 }
 
-function runHidden(command, args) {
+function runHidden(command, args, waitMs = 0) {
   return new Promise((resolve) => {
     try {
-      const child = spawn(command, args, { windowsHide: true, stdio: 'ignore', detached: true });
-      child.unref();
-      resolve(true);
+      const child = spawn(command, args, { windowsHide: true, stdio: 'ignore', detached: waitMs === 0 });
+      if (waitMs > 0) {
+        const timer = setTimeout(() => resolve(true), waitMs);
+        child.on('exit', () => { clearTimeout(timer); resolve(true); });
+        child.on('error', () => { clearTimeout(timer); resolve(false); });
+      } else {
+        child.unref();
+        resolve(true);
+      }
     } catch {
       resolve(false);
     }
   });
 }
 
+const FORCE = process.argv.includes('--force');
+
 async function main() {
-  if (await isPortOpen(PORT)) {
+  if (!FORCE && await isPortOpen(PORT)) {
     console.log(`[launch-chrome] Porta ${PORT} ja ativa (${PROFILE}) - nada a fazer.`);
     process.exit(0);
   }
@@ -52,7 +60,7 @@ async function main() {
 $procs = Get-CimInstance Win32_Process -Filter "Name='chrome.exe'"
 $procs | Where-Object { $_.CommandLine -like '*chrome-debug-profile-motivacao*' -or $_.CommandLine -like '*--remote-debugging-port=9223*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }`;
     const encoded = Buffer.from(ps, 'utf-16le').toString('base64');
-    await runHidden('powershell', ['-NoProfile', '-EncodedCommand', encoded]);
+    await runHidden('powershell', ['-NoProfile', '-EncodedCommand', encoded], 10000);
   } else {
     const ps = `
 $procs = Get-CimInstance Win32_Process -Filter "Name='chrome.exe'"
@@ -61,7 +69,7 @@ $procs | Where-Object {
   ($_.CommandLine -like '*--remote-debugging-port=9222*')
 } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }`;
     const encoded = Buffer.from(ps, 'utf-16le').toString('base64');
-    await runHidden('powershell', ['-NoProfile', '-EncodedCommand', encoded]);
+    await runHidden('powershell', ['-NoProfile', '-EncodedCommand', encoded], 10000);
   }
 
   if (!fs.existsSync(CHROME_EXE)) {
@@ -74,14 +82,39 @@ $procs | Where-Object {
     '--remote-allow-origins=*',
     `--user-data-dir=${PROFILE_DIR}`,
     '--no-first-run',
-    '--start-minimized',
   ];
+
+  // CHROME_MODE=headless (padrao) | windowed
+  // Headless = nenhuma janela abre (nao rouba o foco de jogos/videos).
+  // Prioridade: scripts/chrome-mode.json (toggle do dashboard) > .env
+  function readModeFromFile() {
+    try {
+      const f = path.join(__dirname, 'chrome-mode.json');
+      if (fs.existsSync(f)) {
+        const data = JSON.parse(fs.readFileSync(f, 'utf-8').replace(/^\uFEFF/, ''));
+        if (data[PROFILE] === 'headless' || data[PROFILE] === 'windowed') return data[PROFILE];
+      }
+    } catch {}
+    return null;
+  }
+  const mode = readModeFromFile() || (process.env.CHROME_MODE || 'headless').toLowerCase();
+  if (mode === 'headless') {
+    args.push(
+      '--headless=new',
+      '--window-size=390,844',
+      '--mute-audio',
+      '--disable-blink-features=AutomationControlled',
+      '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    );
+  } else {
+    args.push('--start-minimized');
+  }
   const ok = await runHidden(CHROME_EXE, args);
   if (!ok) {
     console.error(`[launch-chrome] Falha ao iniciar Chrome (${PROFILE})`);
     process.exit(1);
   }
-  console.log(`[launch-chrome] Chrome ${PROFILE} iniciando na porta ${PORT} (sem janela)`);
+  console.log(`[launch-chrome] Chrome ${PROFILE} iniciando na porta ${PORT} (modo ${mode}, sem janela)`);
 
   // Aguarda a porta abrir (ate ~30s) e informa o resultado
   for (let i = 0; i < 12; i++) {

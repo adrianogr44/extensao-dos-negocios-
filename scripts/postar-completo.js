@@ -5,6 +5,7 @@ const net = require('net');
 const { spawn } = require('child_process');
 const { chromium } = require('playwright');
 const notify = require('./notify');
+const legendasDb = require('./legendas-db');
 
 // Carrega variaveis do .env manualmente (sem dependencia externa)
 try {
@@ -72,9 +73,9 @@ const DAILY_LIMIT_TIKTOK = process.env.TIKTOK_DAILY_LIMIT !== undefined ? parseI
 const DAILY_LIMIT_FACEBOOK = process.env.FACEBOOK_DAILY_LIMIT !== undefined ? parseInt(process.env.FACEBOOK_DAILY_LIMIT) : 5;
 
 const DAILY_LIMIT_SHORTS = process.env.SHORTS_DAILY_LIMIT !== undefined ? parseInt(process.env.SHORTS_DAILY_LIMIT) : 5;
-const POST_INTERVAL_MS = (parseInt(process.env.POST_INTERVAL_MINUTES) || 60) * 60 * 1000;
-const POST_INTERVAL_RANDOM_MS = (parseInt(process.env.POST_INTERVAL_RANDOM_MINUTES) || 15) * 60 * 1000;
-const FACEBOOK_PAGE_URL = resolveFacebookPageUrl();
+const _envInt = (v, d) => { const n = parseInt(v); return Number.isFinite(n) ? n : d; };
+const POST_INTERVAL_MS = _envInt(process.env.POST_INTERVAL_MINUTES, 60) * 60 * 1000;
+const POST_INTERVAL_RANDOM_MS = _envInt(process.env.POST_INTERVAL_RANDOM_MINUTES, 15) * 60 * 1000;const FACEBOOK_PAGE_URL = resolveFacebookPageUrl();
 
 function hoje() {
   return new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }).split('/').reverse().join('-');
@@ -108,7 +109,8 @@ function loadQueue() {
     saveQueue(queue);
     return queue;
   }
-  return JSON.parse(fs.readFileSync(QUEUE_FILE, 'utf-8'));
+  const raw = fs.readFileSync(QUEUE_FILE, 'utf-8').replace(/^\uFEFF/, '');
+  return JSON.parse(raw);
 }
 
 function saveQueue(queue) {
@@ -133,6 +135,47 @@ function getNextVideos(queue) {
     (!v.postedInstagram || !v.postedTikTok || !v.postedFacebook) && fs.existsSync(v.path)
   );
   return pending.slice(0, remaining);
+}
+
+// ============================================================
+// LEGENDA POR IA (OpenAI via API local do Studio)
+// Gera a legenda do video com a IA e a usa nas plataformas.
+// Nao deve bloquear a postagem: se falhar, usa o caption fixo.
+// ============================================================
+function getLegendaAiUrl() {
+  return process.env.LEGENDA_AI_API_URL || `http://localhost:${process.env.STUDIO_PORT || 3939}/api/legenda-ai`;
+}
+
+async function gerarLegendaIA(video) {
+  if (video.legendaIA && video.legendaIA.fullText) return video.legendaIA;
+  const salva = legendasDb.getLegenda(video.filename, PROFILE);
+  if (salva && salva.fullText) {
+    video.legendaIA = { caption: salva.caption || '', hashtags: salva.hashtags || [], fullText: salva.fullText, topic: salva.topic || '' };
+    const usaTags = video.legendaIA.hashtags.length > 0 || /#/.test(video.legendaIA.fullText);
+    console.log(`  [LegendaIA] Legenda REAPROVEITADA do banco${usaTags ? ' (com hashtags)' : ''}: ${video.legendaIA.fullText.slice(0, 60).replace(/\n/g, ' ')}`);
+    return video.legendaIA;
+  }
+  try {
+    const res = await fetch(getLegendaAiUrl(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ env: PROFILE, filename: video.filename }),
+      signal: AbortSignal.timeout(150000),
+    });
+    if (!res.ok) throw new Error(`API respondeu ${res.status}`);
+    const data = await res.json();
+    if (!data.fullText || !data.fullText.trim()) throw new Error('resposta sem fullText');
+    const limpa = String(data.fullText).replace(/<br\s*\/?>/gi, '\n').trim();
+    video.legendaIA = { caption: String(data.caption || '').trim(), hashtags: data.hashtags || [], fullText: limpa, topic: data.topic || '' };
+    legendasDb.saveLegenda(video.filename, PROFILE, video.legendaIA);
+    const usaTags = video.legendaIA.hashtags.length > 0 || /#/.test(limpa);
+    console.log(`  [LegendaIA] Legenda gerada pela OpenAI e SALVA no banco${usaTags ? ' (com hashtags)' : ' (SEM hashtags - sera adicionada na postagem)'}`);
+    return video.legendaIA;
+  } catch (err) {
+    console.log(`  [LegendaIA] Falha ao gerar legenda (usando caption fixo): ${err.message}`);
+    video.legendaIA = null;
+    return null;
+  }
 }
 
 function getInstagramCaption() {
@@ -161,20 +204,61 @@ function trendingHashtags(profile, extra) {
   return tags.map((t) => '#' + t).join(' ');
 }
 
-function getTikTokCaption() {
+function legendaIA(video) {
+  if (video && video.legendaIA && video.legendaIA.fullText) return video.legendaIA.fullText;
+  if (video && video.filename) {
+    const salva = legendasDb.getLegenda(video.filename, PROFILE);
+    if (salva && salva.fullText) {
+      return salva.fullText;
+    }
+  }
+  return null;
+}
+
+// Retorna o registro completo da legenda IA (video.legendaIA ou banco).
+function legendaIACompleta(video) {
+  if (video && video.legendaIA && video.legendaIA.fullText) return video.legendaIA;
+  if (video && video.filename) {
+    const salva = legendasDb.getLegenda(video.filename, PROFILE);
+    if (salva && salva.fullText) return salva;
+  }
+  return null;
+}
+
+// Garante que a legenda termine SEMPRE com hashtags: usa as da IA primeiro,
+// depois as do nicho/configuracao.
+function garantirHashtags(texto, registroIA, fallback) {
+  const base = (texto || '').trim();
+  if (!base) return (fallback || '').trim();
+  if (/#\w/.test(base)) return base;
+  const daIA = Array.isArray(registroIA && registroIA.hashtags)
+    ? registroIA.hashtags.filter(h => /^#/.test(h)).join(' ')
+    : '';
+  const tags = daIA || (fallback || process.env.TIKTOK_CAPTION || '#motivacao #disciplina #foco').trim();
+  const tagsSlim = tags.split(/\s+/).filter(t => t.startsWith('#')).slice(0, 6).join(' ');
+  return `${base}\n\n${tagsSlim}`;
+}
+
+function getTikTokCaption(video) {
+  const registro = legendaIACompleta(video);
+  if (registro) return garantirHashtags(registro.fullText, registro, process.env.TIKTOK_CAPTION);
   let base = process.env.TIKTOK_CAPTION || '#futebol #football #soccer #futboledit #futebolbrasileiro #footballtiktok #foryou';
   const extra = base.split(/\s+/).slice(0, 5).join(' ');
   const trends = trendingHashtags(PROFILE, extra);
   return trends ? `${extra} ${trends}` : base;
 }
 
-function getFacebookCaption() {
+function getFacebookCaption(video) {
+  const registro = legendaIACompleta(video);
+  if (registro) return garantirHashtags(registro.fullText, registro, process.env.FACEBOOK_CAPTION);
   let base = process.env.FACEBOOK_CAPTION || '#futebol #football #soccer #futebolbrasileiro #futboledit';
   const trends = trendingHashtags(PROFILE, base);
   return trends ? `${base} ${trends}` : base;
 }
 
-function getShortsCaption() {
+function getShortsCaption(video) {
+  const registro = legendaIACompleta(video);
+  if (registro) return garantirHashtags(registro.fullText, registro, process.env.YOUTUBE_CAPTION || process.env.SHORTS_CAPTION);
   return process.env.YOUTUBE_CAPTION || process.env.SHORTS_CAPTION || '#futebol #football #soccer #futboledit #shorts';
 }
 
@@ -182,6 +266,9 @@ const TIKTOK_BLOCK_PATTERNS = [
   /bloquead/i, /blocked/i, /copyright/i, /direitos autorais/i, /viola\w+ (das|de) regras/i,
   /não é possível publicar/i, /upload failed/i, /falha no envio/i, /media upload failed/i,
   /conteúdo não pode ser/i, /this video.*(can't|cannot|not be published)/i, /removido/i,
+  /conteúdo pode estar restrito/i, /conteúdo não original/i, /baixa qualidade/i, /qr code/i,
+  /verifica\w+ de direitos autorais/i, /substituir vídeo/i, /restricted content/i, /not original/i,
+  /sons isentos de royalties/i,
 ];
 
 function isTikTokBlockError(message) {
@@ -243,7 +330,7 @@ async function fecharPopupsInstagram(page) {
   }
 }
 
-async function postToInstagram(page, videoPath) {
+async function postToInstagram(page, videoPath, video) {
   console.log(`  [Instagram] Postando: ${path.basename(videoPath)}`);
 
   await page.goto('https://www.instagram.com', { waitUntil: 'networkidle', timeout: 60000 });
@@ -278,7 +365,7 @@ async function postToInstagram(page, videoPath) {
   if (await captionArea.isVisible({ timeout: 10000 }).catch(() => false)) {
     await captionArea.click();
     await page.waitForTimeout(500);
-    await page.keyboard.type(getInstagramCaption(), { delay: 30 });
+    await page.keyboard.type(getInstagramCaption(video), { delay: 30 });
     await page.waitForTimeout(1000);
   }
 
@@ -352,7 +439,11 @@ async function digitarLegendaTikTok(page, captionBox, caption) {
   await page.waitForTimeout(1500);
 }
 
-async function postToTikTok(page, videoPath) {
+async function postToTikTok(page, videoPath, video) {
+  if (!legendaIA(video)) {
+    const ia = await gerarLegendaIA(video).catch(() => null);
+    if (ia) console.log('  [TikTok] Legenda IA gerada (nao existia no loop)');
+  }
   console.log(`  [TikTok] Postando: ${path.basename(videoPath)}`);
 
   await page.goto('https://www.tiktok.com/upload', { waitUntil: 'load', timeout: 120000 });
@@ -390,11 +481,11 @@ async function postToTikTok(page, videoPath) {
   await page.waitForTimeout(300);
   await page.keyboard.press('Backspace');
   await page.waitForTimeout(600);
-  await digitarLegendaTikTok(page, captionBox, getTikTokCaption());
+  await digitarLegendaTikTok(page, captionBox, getTikTokCaption(video));
   await screenshot(page, '3b-tiktok-legenda-digitada');
 
   const textoCampo = (await captionBox.innerText().catch(() => '')).replace(/\s+/g, ' ');
-  const esperado = getTikTokCaption().replace(/\s+/g, ' ').slice(0, 40);
+  const esperado = getTikTokCaption(video).replace(/\s+/g, ' ').slice(0, 40);
   if (!textoCampo.includes(esperado)) {
     console.log(`  [TikTok] Campo: "${textoCampo.slice(0, 120)}"`);
     throw new Error(`TikTok: legenda NAO registrada no editor ("${textoCampo.slice(0, 60)}") - pulando video para nao publicar sem legenda`);
@@ -435,19 +526,46 @@ async function postToTikTok(page, videoPath) {
   await postBtn.click();
   console.log('  [TikTok] Clicou em Publicar, aguardando publicacao...');
 
+  // Possivel dialogo de aviso (conteudo restrito, etc.) — confirmar se aparecer
+  for (let i = 0; i < 3; i++) {
+    try {
+      const confirmBtn = page.locator('div[role="dialog"] button:has-text("Publicar e salvar"), div[role="dialog"] button:has-text("Publicar"), div[role="dialog"] button:has-text("Post"), button:has-text("Publicar mesmo assim"), button:has-text("Post anyway"), button:has-text("Publish anyway")').first();
+      if (await confirmBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+        await confirmBtn.click({ force: true }).catch(() => confirmBtn.evaluate(el => el.click()));
+        console.log('  [TikTok] Dialogo de confirmacao confirmado');
+        await page.waitForTimeout(1500);
+        continue;
+      }
+    } catch {}
+    break;
+  }
+
   await page.waitForTimeout(8000);
   await screenshot(page, '5-tiktok-pos-publicar');
 
+  // CONFIRMACAO REAL: saiu da tela de /upload (foi publicado e voltou ao
+  // conteudo) OU apareceu aviso explicito de publicacao com sucesso.
+  // NUNCA confiar em texto generico da sidebar ("visualizacao/curtidas").
   try {
-    await page.waitForFunction(() => {
+    const publicado = await page.waitForFunction(() => {
+      if (!location.pathname.includes('/upload')) return true;
       const text = document.body.innerText;
-      return /visualizaç[ãa]o|curtidas|comentários|público|privacidade/i.test(text);
-    }, { timeout: 60000 });
+      return /seu vídeo (foi |está sendo )?publicado|publicado com sucesso|vídeo publicado|publishing your video|video published|published successfully/i.test(text);
+    }, { timeout: 120000 }).then(() => true).catch(() => false);
+    if (!publicado) throw new Error('tiktok ainda na tela de /upload apos 120s');
     console.log('  [TikTok] Video publicado com sucesso!');
   } catch {
     await screenshot(page, '5b-tiktok-falha');
-    const texto = await page.evaluate(() => document.body.innerText.substring(0, 1000));
+    const texto = await page.evaluate(() => document.body.innerText.substring(0, 2500)).catch(() => '');
     console.log(`  [TikTok] Texto na pagina: ${texto.replace(/\n/g, ' ').substring(0, 400)}`);
+    const bloqueios = texto.match(/[^.\n]*(copyright|direitos autorais|direito autoral|viola[çc][ãa]o|removid[ao]|restringid[ao]|restrito|não pode ser publicado|nao pode ser publicado|media upload failed|conteúdo não pode|cannot be published|blocked|bloquead)[^.\n]*/gi);
+    if (bloqueios && bloqueios.length > 0) {
+      const motivo = bloqueios[0].replace(/\s+/g, ' ').trim().slice(0, 160);
+      if (isTikTokBlockError(motivo)) {
+        console.log(`  [TikTok] Detectado: ${motivo}`);
+        throw new Error(`TikTok: ${motivo}`);
+      }
+    }
     throw new Error('Nao foi possivel confirmar publicacao no TikTok Studio');
   }
 
@@ -455,7 +573,7 @@ async function postToTikTok(page, videoPath) {
   return true;
 }
 
-async function postToFacebook(browser, videoPath) {
+async function postToFacebook(browser, videoPath, video) {
   console.log(`  [Facebook] Postando: ${path.basename(videoPath)}`);
 
   const fbPage = browser.contexts()[0].pages().find(p => p.url().includes('facebook.com'));
@@ -465,14 +583,18 @@ async function postToFacebook(browser, videoPath) {
     const page = await browser.contexts()[0].newPage();
     await page.goto(FACEBOOK_PAGE_URL + '&sk=reels_tab', { waitUntil: 'domcontentloaded', timeout: 30000 });
     await page.waitForTimeout(6000);
-    return await postToFacebookOnPage(page, videoPath);
+    return await postToFacebookOnPage(page, videoPath, video);
   }
 
   console.log('  [Facebook] Usando pagina existente');
-  return await postToFacebookOnPage(fbPage, videoPath);
+  return await postToFacebookOnPage(fbPage, videoPath, video);
 }
 
-async function postToFacebookOnPage(page, videoPath) {
+async function postToFacebookOnPage(page, videoPath, video) {
+  if (!legendaIA(video)) {
+    const ia = await gerarLegendaIA(video).catch(() => null);
+    if (ia) console.log('  [Facebook] Legenda IA gerada (nao existia no loop)');
+  }
   const origUrl = page.url();
   if (!FACEBOOK_PAGE_URL) throw new Error('Facebook: configure MOTIVACAO_FACEBOOK_PAGE_URL no .env antes de postar (perfil motivacao)');
   await page.goto(FACEBOOK_PAGE_URL + '&sk=reels_tab', { waitUntil: 'domcontentloaded', timeout: 30000 });
@@ -511,26 +633,87 @@ async function postToFacebookOnPage(page, videoPath) {
   await page.waitForTimeout(25000);
 
   for (let i = 0; i < 2; i++) {
-    const btnNext = page.locator('[aria-label="Avançar"]:visible, [aria-label="Next"]:visible').first();
-    if (await btnNext.isVisible({ timeout: 10000 }).catch(() => false)) {
-      await btnNext.click({ force: true }).catch(() => btnNext.evaluate(el => el.click()));
+    const btnNext = page.locator('[aria-label="Avançar"]:visible, [aria-label="Next"]:visible, span:has-text("Avançar"):visible, span:has-text("Next"):visible').first();
+    if (await btnNext.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await btnNext.click({ force: true }).catch(async () => {
+        await btnNext.evaluate(el => {
+          let t = el;
+          for (let d = 0; d < 4 && t; d++) {
+            if (t.getAttribute('role') === 'button' || t.onclick || t.tagName === 'BUTTON' || t.tagName === 'A') break;
+            t = t.parentElement;
+          }
+          (t || el).click();
+        });
+      });
       console.log(`  [Facebook] Avançar ${i + 1}`);
       await page.waitForTimeout(5000);
     }
   }
 
-  const captionBox = page.locator('div[contenteditable="true"]').first();
+  const captionBox = page
+    .locator('div[role="dialog"] div[data-lexical-editor="true"]:visible, div[role="dialog"] textarea:visible, div[role="dialog"] div[contenteditable="true"]:visible, div[role="dialog"] div[role="textbox"]:visible, div[role="dialog"] [aria-placeholder*="Descreva"]:visible, div[role="dialog"] [aria-label*="Descreva"]:visible, div[role="dialog"] [aria-label*="Escreva"]:visible, div[data-lexical-editor="true"]:visible, textarea:visible, div[role="textbox"]:visible, [data-testid="reels-caption-input"]:visible')
+    .first();
   if (await captionBox.isVisible({ timeout: 10000 }).catch(() => false)) {
-    await captionBox.click();
-    await page.waitForTimeout(300);
-    await captionBox.fill(getFacebookCaption());
-    console.log('  [Facebook] Legenda inserida');
-    await page.waitForTimeout(2000);
+    await captionBox.click({ force: true }).catch(() => {});
+    await page.waitForTimeout(600);
+    const legenda = getFacebookCaption(video);
+    const isDialogBox = await captionBox.evaluate(el => !!el.closest('div[role="dialog"]')).catch(() => false);
+    let boxAlvo = captionBox;
+    if (!isDialogBox) {
+      console.log('  [Facebook] Caixa fora do dialog. Usando a do dialog...');
+      const dialogBox = page.locator('div[role="dialog"] div[data-lexical-editor="true"]:visible, div[role="dialog"] div[contenteditable="true"]:visible, div[role="dialog"] textarea:visible, div[role="dialog"] div[role="textbox"]:visible').first();
+      if (!(await dialogBox.isVisible({ timeout: 4000 }).catch(() => false))) {
+        throw new Error('Facebook: caixa de legenda no dialog nao encontrada. Cancelando postagem para NAO publicar sem legenda.');
+      }
+      boxAlvo = dialogBox;
+      await dialogBox.click({ force: true }).catch(() => {});
+      await page.waitForTimeout(400);
+    }
+
+    const digitarTudo = async (box, texto) => {
+      await box.evaluate(el => el.focus()).catch(() => {});
+      await page.keyboard.press('Control+A').catch(() => {});
+      await page.waitForTimeout(150);
+      await page.keyboard.type(texto, { delay: 12 });
+      await page.waitForTimeout(800);
+    };
+
+    await digitarTudo(boxAlvo, legenda);
+
+    const final = await boxAlvo.evaluate(el => (el.value !== undefined ? el.value : el.innerText || el.textContent || '')).catch(() => '');
+    const textoFinal = String(final || '').trim();
+    if (textoFinal.length >= 10) {
+      console.log(`  [Facebook] Legenda IA digitada e CONFIRMADA na caixa (${textoFinal.length} chars): ${JSON.stringify(textoFinal.slice(0, 70))}`);
+    } else {
+      console.log(`  [Facebook] 1a tentativa deu '${JSON.stringify(textoFinal.slice(0, 40))}'. Redigitando mais devagar...`);
+      await boxAlvo.click({ force: true }).catch(() => {});
+      await page.keyboard.press('Control+A').catch(() => {});
+      await page.keyboard.type(legenda, { delay: 30 });
+      await page.waitForTimeout(1200);
+      const final2 = await boxAlvo.evaluate(el => (el.value !== undefined ? el.value : el.innerText || el.textContent || '')).catch(() => '');
+      const t2 = String(final2 || '').trim();
+      console.log(`  [Facebook] Resultado 2a tentativa (${t2.length} chars): ${JSON.stringify(t2.slice(0, 70))}`);
+      if (t2.length < 10) {
+        throw new Error(`Facebook: legenda IA NAO entrou na caixa (Lexical). Cancelando postagem para NAO publicar sem legenda.`);
+      }
+    }
+    await page.waitForTimeout(1500);
+  } else {
+    throw new Error('Facebook: caixa de legenda nao encontrada. Cancelando postagem para NAO publicar sem legenda.');
   }
 
-  const btnPost = page.locator('[aria-label="Postar"]:visible, [aria-label="Publish"]:visible').first();
+  const btnPost = page.locator('div[role="dialog"] [aria-label="Postar"]:visible, div[role="dialog"] [aria-label="Publish"]:visible, div[role="dialog"] button:has-text("Postar"):visible, div[role="dialog"] button:has-text("Publish"):visible, div[role="dialog"] span:has-text("Postar"):visible, [aria-label="Postar"]:visible, [aria-label="Publish"]:visible').first();
   if (await btnPost.isVisible({ timeout: 10000 }).catch(() => false)) {
-    await btnPost.click({ force: true }).catch(() => btnPost.evaluate(el => el.click()));
+    await btnPost.click({ force: true }).catch(async () => {
+      await btnPost.evaluate(el => {
+        let t = el;
+        for (let d = 0; d < 4 && t; d++) {
+          if (t.getAttribute('role') === 'button' || t.onclick || t.tagName === 'BUTTON' || t.tagName === 'A') break;
+          t = t.parentElement;
+        }
+        (t || el).click();
+      });
+    });
     console.log('  [Facebook] Postar clicado!');
   } else {
     throw new Error('Facebook: botao Postar nao encontrado. Video NAO postado.');
@@ -554,7 +737,11 @@ async function postToFacebookOnPage(page, videoPath) {
   return true;
 }
 
-async function postToShorts(page, videoPath) {
+async function postToShorts(page, videoPath, video) {
+  if (!legendaIA(video)) {
+    const ia = await gerarLegendaIA(video).catch(() => null);
+    if (ia) console.log('  [Shorts] Legenda IA gerada (nao existia no loop)');
+  }
   console.log(`  [Shorts] Postando: ${path.basename(videoPath)}`);
 
   const studioUrl = process.env.YOUTUBE_CHANNEL_ID
@@ -587,7 +774,7 @@ async function postToShorts(page, videoPath) {
   const titleEl = page.locator('#title-textarea').first();
   await titleEl.waitFor({ state: 'visible', timeout: 60000 }).catch(() => {});
   if (await titleEl.isVisible({ timeout: 3000 }).catch(() => false)) {
-    const caption = getShortsCaption();
+    const caption = getShortsCaption(video);
     await page.evaluate((text) => {
       const host = document.querySelector('#title-textarea');
       if (!host) return;
@@ -847,26 +1034,42 @@ const toPost = [];
   const contexts = browser.contexts();
   const context = contexts[0] || await browser.newContext();
   const page = await context.newPage();
+  await page.emulateMedia({ colorScheme: 'light' }).catch(() => {});
 
   console.log('Chrome conectado com sucesso!\n');
 
   let totalErrors = 0;
 
-  for (let i = 0; i < toPost.length; i++) {
+  let i = 0;
+  while (i < toPost.length) {
     const video = toPost[i];
     console.log(`\n--- [${i + 1}/${toPost.length}] ${video.filename} ---`);
 
+    const legenda = await gerarLegendaIA(video);
+
     const results = {};
+
+    const pendentesVez = [];
+    if (IG_ENABLED && !video.postedInstagram) pendentesVez.push('IG');
+    if (!video.postedTikTok && process.env.FACEBOOK_ONLY !== 'true') pendentesVez.push('TT');
+    if (!video.postedFacebook) pendentesVez.push('FB');
+    if (SH_ENABLED && !video.postedShorts) pendentesVez.push('SH');
+    if (pendentesVez.length === 0) {
+      console.log(`  [INFO] Nenhuma plataforma pendente para este video (ja postado hoje). Pulando.`);
+    } else {
+      console.log(`  [INFO] Plataformas desta vez: ${pendentesVez.join(' + ')}`);
+    }
 
     if (IG_ENABLED && !video.postedInstagram) {
       try {
         const igPage = await context.newPage();
-        await postToInstagram(igPage, video.path);
+        await postToInstagram(igPage, video.path, video);
         video.postedInstagram = true;
         video.instagramDate = new Date().toISOString();
         queue.dailyCount++;
         await igPage.close();
         results.instagram = true;
+        legendasDb.marcarUso(video.filename, PROFILE, 'instagram');
       } catch (err) {
         console.error(`  [Instagram] ERRO: ${err.message}`);
         video.error = video.error ? `${video.error} | Instagram: ${err.message}` : `Instagram: ${err.message}`;
@@ -879,13 +1082,14 @@ const toPost = [];
 
     await page.waitForTimeout(3000);
 
-    if (!video.postedTikTok) {
+    if (!video.postedTikTok && process.env.FACEBOOK_ONLY !== 'true') {
       try {
-        await postToTikTok(page, video.path);
+        await postToTikTok(page, video.path, video);
         video.postedTikTok = true;
         video.tiktokDate = new Date().toISOString();
         queue.dailyCountTikTok++;
         results.tiktok = true;
+        legendasDb.marcarUso(video.filename, PROFILE, 'tiktok');
       } catch (err) {
         console.error(`  [TikTok] ERRO: ${err.message}`);
         video.error = video.error ? `${video.error} | TikTok: ${err.message}` : `TikTok: ${err.message}`;
@@ -897,15 +1101,32 @@ const toPost = [];
       results.tiktok = false;
     }
 
+    if (results.tiktok !== true && video.blockedTikTok && !video.postedTikTok) {
+      console.log(`  [SKIP] Video bloqueado no TikTok (${video.tiktokBlockReason || ''}). Pulando Facebook/Shorts deste video.`);
+      video.attemptDate = today;
+      queue.lastPostDate = today;
+      saveQueue(queue);
+      i++;
+      const refill = queue.videos.find(v =>
+        (v.attemptDate || '') !== today && !v.postedTikTok && !v.blockedTikTok && fs.existsSync(v.path)
+      );
+      if (refill && !toPost.some(t => t.filename === refill.filename) && toPost.length < 3) {
+        toPost.push(refill);
+        console.log(`  [SKIP] Refill: proximo video pendente na fila -> ${refill.filename}`);
+      }
+      continue;
+    }
+
     await page.waitForTimeout(3000);
 
     if (!video.postedFacebook) {
       try {
-        await postToFacebook(browser, video.path);
+        await postToFacebook(browser, video.path, video);
         video.postedFacebook = true;
         video.facebookDate = new Date().toISOString();
         queue.dailyCountFacebook++;
         results.facebook = true;
+        legendasDb.marcarUso(video.filename, PROFILE, 'facebook');
       } catch (err) {
         console.error(`  [Facebook] ERRO: ${err.message}`);
         video.error = video.error ? `${video.error} | Facebook: ${err.message}` : `Facebook: ${err.message}`;
@@ -921,12 +1142,13 @@ const toPost = [];
     if (SH_ENABLED && !video.postedShorts) {
       try {
         const shortsPage = await context.newPage();
-        await postToShorts(shortsPage, video.path);
+                await postToShorts(shortsPage, video.path, video);
         video.postedShorts = true;
         video.shortsDate = new Date().toISOString();
         queue.dailyCountShorts++;
         await shortsPage.close();
         results.shorts = true;
+        legendasDb.marcarUso(video.filename, PROFILE, 'shorts');
       } catch (err) {
         console.error(`  [Shorts] ERRO: ${err.message}`);
         video.error = video.error ? `${video.error} | Shorts: ${err.message}` : `Shorts: ${err.message}`;
@@ -956,6 +1178,8 @@ const toPost = [];
       console.log(`\nAguardando ${delayMin} min ate o proximo video...`)
       await new Promise(r => setTimeout(r, delay))
     }
+
+    i++;
   }
 
   await page.close().catch(() => {});

@@ -100,8 +100,19 @@ function launchChrome(envId: string) {
     '--remote-allow-origins=*',
     `--user-data-dir=${profilePath}`,
     '--no-first-run',
-    '--start-minimized',
   ]
+  const mode = (process.env.CHROME_MODE || 'headless').toLowerCase()
+  if (mode === 'headless') {
+    args.push(
+      '--headless=new',
+      '--window-size=390,844',
+      '--mute-audio',
+      '--disable-blink-features=AutomationControlled',
+      '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    )
+  } else {
+    args.push('--start-minimized')
+  }
   spawn(CHROME, args, { detached: true, windowsHide: true, stdio: 'ignore' }).unref()
 }
 

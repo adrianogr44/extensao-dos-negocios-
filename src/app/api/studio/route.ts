@@ -15,6 +15,7 @@ import {
   type Env,
   type QueueVideo,
 } from '@/lib/studio-data'
+import { readChromeMode } from '@/lib/chrome-manager'
 
 export const dynamic = 'force-dynamic'
 
@@ -63,6 +64,7 @@ function buildEnvironment(env: Env) {
     color: env.color,
     port: env.port,
     chromeProfile: env.chromeProfile,
+    chromeMode: readChromeMode(env.id),
     videosDir: env.videosDir,
     platforms: env.enabledPlatforms.map((key) => {
       const p = PLATFORMS.find((pp) => pp.key === key)!

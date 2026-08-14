@@ -10,10 +10,12 @@ import {
   Puzzle,
   Settings,
   CalendarClock,
+  Sparkles,
 } from 'lucide-react'
 
 const NAV = [
   { href: '/dashboard', label: 'Visão Geral', icon: LayoutDashboard },
+  { href: '/legenda-ai', label: 'Legenda IA', icon: Sparkles },
   { href: '/schedule', label: 'Agendamento', icon: CalendarClock },
   { href: '/calendario', label: 'Calendário', icon: CalendarDays },
   { href: '/videos', label: 'Vídeos', icon: Video },

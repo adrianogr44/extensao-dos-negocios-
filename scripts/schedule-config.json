@@ -1,10 +1,10 @@
 {
   "times": [
-    "20:00",
-    "09:30",
-    "12:00"
+    "10:30",
+    "16:00",
+    "22:00"
   ],
   "timezone": "America/Sao_Paulo",
   "enabled": true,
-  "videosPerRun": 3
+  "videosPerRun": 1
 }

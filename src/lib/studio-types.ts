@@ -33,6 +33,7 @@ export interface StudioEnvironment {
   color: string
   port: number
   chromeProfile: string
+  chromeMode: 'headless' | 'windowed'
   videosDir: string
   platforms: PlatformToday[]
   schedule: string[]

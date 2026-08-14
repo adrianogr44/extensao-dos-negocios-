@@ -411,6 +411,41 @@ const { data, loading } = useStudio()
                 Abrir Chrome
               </button>
               <button
+                className="btn btn-sm shrink-0"
+                onClick={async () => {
+                  try {
+                    const nova = env.chromeMode === 'headless' ? 'windowed' : 'headless'
+                    const r = await fetch('/api/studio/chrome-mode', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ env: env.id, mode: nova }),
+                    })
+                    const d = await r.json()
+                    if (d.ok) {
+                      push({
+                        kind: 'success',
+                        title: `Chrome em modo ${nova === 'headless' ? 'headless' : 'visível'}`,
+                        description: d.message,
+                      })
+                      if (nova === 'windowed') {
+                        push({
+                          kind: 'info',
+                          title: 'Verifique o Chrome',
+                          description: `${env.nome}: acompanhe a automação na janela que abriu (porta ${env.port})`,
+                        })
+                      }
+                    } else {
+                      push({ kind: 'error', title: 'Falha ao alternar', description: d.error || d.message })
+                    }
+                  } catch (e) {
+                    push({ kind: 'error', title: 'Falha', description: `Erro: ${e instanceof Error ? e.message : String(e)}` })
+                  }
+                }}
+              >
+                <Radio size={12} />
+                {env.chromeMode === 'headless' ? 'Ver automação' : 'Ocultar'}
+              </button>
+              <button
                 className="btn btn-sm"
                 onClick={async () => {
                   try {
