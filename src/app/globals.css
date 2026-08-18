@@ -1,31 +1,32 @@
 @import 'tailwindcss';
 
 :root {
-  --bg: #0b0d14;
-  --bg-elev: #0f1220;
-  --surface: #12161f;
-  --surface-2: #161c27;
-  --surface-3: #1b2230;
-  --border: #232b3c;
-  --border-strong: #2c3850;
-  --text: #e8ecf4;
-  --text-2: #9aa4b8;
-  --text-3: #5c697e;
-  --accent: #25b946;
-  --accent-2: #67e380;
+  --bg: #080a0f;
+  --bg-elev: #0e121b;
+  --surface: #0e121b;
+  --surface-2: #111725;
+  --surface-3: #161d2b;
+  --border: #1c2433;
+  --border-strong: #2a3346;
+  --text: #eef2f8;
+  --text-2: #8b97ab;
+  --text-3: #586074;
+  --accent: #17c96f;
+  --accent-2: #38ef9b;
+  --violet: #8b7dff;
   --success: #34d399;
-  --warning: #fbbf24;
+  --warning: #ffb545;
   --danger: #f87171;
-  --fut: #35d07f;
-  --cine: #f5a623;
+  --fut: #38ef9b;
+  --cine: #ffb545;
   --ig: #e4405f;
   --tt: #25f4ee;
   --fb: #1877f2;
   --yt: #ff4d4d;
-  --radius: 10px;
-  --font-display: 'Bahnschrift', 'Segoe UI Variable Display', 'Segoe UI', system-ui, sans-serif;
-  --font-body: 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, sans-serif;
-  --font-mono: 'Cascadia Code', 'Consolas', 'SF Mono', monospace;
+  --radius: 12px;
+  --font-display: var(--font-display-next), 'Bricolage Grotesque', 'Segoe UI', system-ui, sans-serif;
+  --font-body: var(--font-body-next), 'IBM Plex Sans', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-mono-next), 'IBM Plex Mono', 'Cascadia Code', 'Consolas', monospace;
 }
 
 html {
@@ -40,6 +41,19 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+}
+
+/* Atmosfera de fundo — profundidade sutil atrás de todo o painel */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(900px 600px at 82% -6%, rgba(56, 239, 155, 0.08), transparent 60%),
+    radial-gradient(720px 520px at 4% 2%, rgba(139, 125, 255, 0.06), transparent 55%),
+    radial-gradient(1000px 720px at 50% 118%, rgba(56, 239, 155, 0.04), transparent 60%);
 }
 
 ::selection {
@@ -299,6 +313,15 @@ body {
   to {
     opacity: 0;
     transform: translateX(28px);
+  }
+}
+
+@keyframes toastBar {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
   }
 }
 

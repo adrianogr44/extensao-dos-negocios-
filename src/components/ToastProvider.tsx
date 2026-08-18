@@ -21,10 +21,10 @@ const ToastContext = createContext<ToastContextValue>({ push: () => {} })
 export const useToasts = () => useContext(ToastContext)
 
 const KINDS = {
-  success: { icon: CircleCheck, color: 'text-[#34d399]', bg: 'bg-[#34d399]/10', border: 'border-[#34d399]/30' },
-  error: { icon: TriangleAlert, color: 'text-[#f87171]', bg: 'bg-[#f87171]/10', border: 'border-[#f87171]/30' },
-  info: { icon: Info, color: 'text-[#38bdf8]', bg: 'bg-[#38bdf8]/10', border: 'border-[#38bdf8]/30' },
-  loading: { icon: Loader2, color: 'text-[#fbbf24]', bg: 'bg-[#fbbf24]/10', border: 'border-[#fbbf24]/30' },
+  success: { icon: CircleCheck, accent: '#34d399', tint: 'rgba(52,211,153,0.12)', border: 'rgba(52,211,153,0.34)' },
+  error: { icon: TriangleAlert, accent: '#f87171', tint: 'rgba(248,113,113,0.12)', border: 'rgba(248,113,113,0.34)' },
+  info: { icon: Info, accent: '#38bdf8', tint: 'rgba(56,189,248,0.12)', border: 'rgba(56,189,248,0.34)' },
+  loading: { icon: Loader2, accent: '#ffb545', tint: 'rgba(255,181,69,0.12)', border: 'rgba(255,181,69,0.34)' },
 }
 
 let uid = 0
@@ -59,9 +59,13 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           return (
             <div
               key={t.id}
-              className={`animate-toast-in pointer-events-auto flex items-start gap-3 rounded-xl border ${k.border} ${k.bg} p-3.5 shadow-xl shadow-black/40 backdrop-blur-md ${
+              className={`animate-toast-in pointer-events-auto relative flex items-center gap-3 overflow-hidden rounded-xl border p-3 shadow-xl shadow-black/50 backdrop-blur-md ${
                 t.leaving ? 'animate-toast-out' : ''
               }`}
+              style={{
+                background: 'linear-gradient(145deg, rgba(17,23,37,0.97), rgba(11,14,21,0.97))',
+                borderColor: k.border,
+              }}
               onMouseEnter={() => {
                 if (timeouts.current[t.id]) clearTimeout(timeouts.current[t.id])
               }}
@@ -69,11 +73,22 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                 timeouts.current[t.id] = setTimeout(() => remove(t.id), 2000)
               }}
             >
-              <Icon size={18} className={`mt-0.5 shrink-0 ${k.color} ${t.kind === 'loading' ? 'animate-spin' : ''}`} />
-              <div className="min-w-0">
-                <p className="text-[13px] font-semibold text-white">{t.title}</p>
-                {t.description && <p className="mt-0.5 truncate text-xs text-white/60">{t.description}</p>}
+              <span
+                className="grid h-9 w-9 shrink-0 place-items-center rounded-[10px]"
+                style={{ background: k.tint, color: k.accent }}
+              >
+                <Icon size={18} className={t.kind === 'loading' ? 'animate-spin' : ''} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="font-display text-[13.5px] font-bold text-white">{t.title}</p>
+                {t.description && <p className="mt-0.5 truncate text-xs text-white/55">{t.description}</p>}
               </div>
+              {!t.leaving && t.kind !== 'loading' && (
+                <span
+                  className="absolute inset-x-0 bottom-0 h-[3px] origin-left"
+                  style={{ background: k.accent, animation: 'toastBar 5s linear forwards' }}
+                />
+              )}
             </div>
           )
         })}

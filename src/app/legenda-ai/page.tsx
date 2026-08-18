@@ -44,6 +44,7 @@ export default function LegendaAiPage() {
     if (f) {
       setSelectedFile(null)
       setResult(null)
+      push({ kind: 'success', title: 'Vídeo enviado com sucesso', description: f.name })
     }
     e.target.value = ''
   }

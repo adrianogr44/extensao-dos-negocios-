@@ -8,7 +8,7 @@ const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
 // Navegadores SEMPRE enviam o header Origin em requisicoes cross-origin; se o Origin
 // nao bate com o host do painel, recusamos. Requisicoes sem Origin (ferramentas locais,
 // curl, o proprio scheduler) passam — o vetor de risco e o navegador de terceiros.
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   if (!MUTATING.has(request.method)) return NextResponse.next()
 
   const origin = request.headers.get('origin')
