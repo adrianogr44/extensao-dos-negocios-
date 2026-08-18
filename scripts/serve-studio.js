@@ -26,7 +26,11 @@ const SCHEDULE_CONFIG_FILE = path.join(__dirname, 'schedule-config.json');
 const ANALYTICS_DATA_FILE = path.join(__dirname, 'analytics-data.json');
 const VIDEOS_DIR_FILE = path.join(__dirname, 'videos-dir.json');
 const DEFAULT_VIDEOS_DIR = process.env.VIDEOS_DIR || path.join(require('os').homedir(), 'Downloads', 'FabricaReels');
-const STUDIO_SCHEDULER_DISABLED = process.env.STUDIO_SCHEDULER_DISABLED === 'true';
+// Agendador do serve-studio e opt-in: por padrao NAO agenda, para nao concorrer com o
+// postar-agendado.js (o agendador canonico, auto-iniciado pelo instrumentation do Next).
+// So liga com STUDIO_SCHEDULER_ENABLED=true, e nunca se STUDIO_SCHEDULER_DISABLED=true.
+const STUDIO_SCHEDULER_ENABLED = process.env.STUDIO_SCHEDULER_ENABLED === 'true'
+  && process.env.STUDIO_SCHEDULER_DISABLED !== 'true';
 
 function loadVideosDir() {
   try {
@@ -251,8 +255,8 @@ function startScheduler() {
   schedulerJobs.forEach(j => j.stop());
   schedulerJobs = [];
 
-  if (STUDIO_SCHEDULER_DISABLED) {
-    console.log('Scheduler do Studio desabilitado (STUDIO_SCHEDULER_DISABLED=true). Usar postar-agendado.js');
+  if (!STUDIO_SCHEDULER_ENABLED) {
+    console.log('Scheduler do Studio desligado (padrao) — postar-agendado.js e o unico agendador. Para agendar aqui: STUDIO_SCHEDULER_ENABLED=true');
     return;
   }
 
@@ -333,11 +337,12 @@ const server = http.createServer((req, res) => {
   }
 
   if (pathname === '/api/log') {
+    // SSE consumido pelo proprio painel (same-origin) — sem CORS aberto para nao
+    // deixar qualquer site externo ler o stream de logs da automacao.
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       'Connection': 'keep-alive',
-      'Access-Control-Allow-Origin': '*',
     });
     res.write(`data: ${JSON.stringify({ type: 'connected', text: 'Conectado' })}\n\n`);
     logBuffer.forEach(line => {

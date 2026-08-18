@@ -739,21 +739,26 @@ async function postToFacebookOnPage(page, videoPath, video) {
     throw new Error('Facebook: botao Postar nao encontrado. Video NAO postado.');
   }
 
-  console.log('  [Facebook] Aguardando publicacao (30s)...');
-  await page.waitForTimeout(30000);
+  console.log('  [Facebook] Aguardando confirmacao da publicacao...');
+  let publicado = false;
+  for (let tentativa = 0; tentativa < 7 && !publicado; tentativa++) {
+    await page.waitForTimeout(5000);
+    publicado = await page.evaluate(() => {
+      const txt = document.body.innerText || '';
+      return txt.includes('Criar reel') || txt.includes('Create reel')
+        || txt.includes('Publicado com sucesso') || txt.includes('Published');
+    }).catch(() => false);
+  }
 
-  const dialogFechado = await page.evaluate(() => {
-    const txt = document.body.innerText;
-    return txt.includes('Criar reel') || txt.includes('Publicado com sucesso');
-  }).catch(() => false);
-
-  if (!dialogFechado) {
-    console.log('  [Facebook] Aviso: nao foi possivel confirmar o dialogo fechado');
+  if (!publicado) {
+    // Sem confirmacao NAO marca como postado: evita inflar o contador diario com um
+    // reel que nunca saiu. O loop trata o throw e mantem o video como pendente.
+    throw new Error('Facebook: publicacao nao confirmada (~35s sem o dialogo fechar). Video NAO marcado como postado.');
   }
 
   try { await page.goto(origUrl, { waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => {}); } catch {}
 
-  console.log('  [Facebook] Reel postado com sucesso!');
+  console.log('  [Facebook] Reel postado e confirmado!');
   return true;
 }
 
@@ -848,9 +853,23 @@ async function postToShorts(page, videoPath, video) {
     throw new Error('Botao Publicar nao encontrado');
   }
 
-  console.log('  [Shorts] Publicar clicado!');
-  await page.waitForTimeout(30000);
-  console.log('  [Shorts] Video publicado com sucesso!');
+  console.log('  [Shorts] Publicar clicado! Aguardando confirmacao...');
+  let publicadoSh = false;
+  for (let tentativa = 0; tentativa < 7 && !publicadoSh; tentativa++) {
+    await page.waitForTimeout(5000);
+    // Sucesso = o dialog de edicao fechou (botao Publicar sumiu) ou surgiu o link do short.
+    const doneVisivel = await page.locator('#done-button, ytcp-button#done-button')
+      .first().isVisible({ timeout: 1000 }).catch(() => false);
+    const temLink = await page.locator('a[href*="/shorts/"], a[href*="youtu.be/"]')
+      .first().isVisible({ timeout: 1000 }).catch(() => false);
+    publicadoSh = temLink || !doneVisivel;
+  }
+
+  if (!publicadoSh) {
+    throw new Error('Shorts: publicacao nao confirmada (~35s, dialog ainda aberto). Video NAO marcado como postado.');
+  }
+
+  console.log('  [Shorts] Video publicado e confirmado!');
   return true;
 }
 
