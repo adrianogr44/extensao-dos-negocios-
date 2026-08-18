@@ -6,15 +6,15 @@ Sistema automatizado de postagem de vídeos no **Instagram** e **TikTok** usando
 
 ```
 scripts/
-  postar-completo.js    # Posta em ambas plataformas (IG + TT)
+  postar-completo.js    # Posta em todas as plataformas (IG + TT + FB + Shorts)
   tiktok-poster.js      # Posta apenas no TikTok
   instagram-poster.js   # Posta apenas no Instagram
-  postar-agendado.js    # Agendador cron (06:30 e 11:30)
-  serve-studio.js       # Interface web (localhost:3939)
-  posting-studio.html   # UI do studio
+  postar-agendado.js    # Agendador cron (horários em schedule-config.json)
   launch-chrome.cmd     # Inicia Chrome com debug remoto
   launch-chrome.ps1     # Versão PowerShell
   dashboard.js          # Scraper de perfil Instagram
+
+src/                    # Painel web "Reel Machine" (Next.js, localhost:3939)
 ```
 
 ## Pré-requisitos
@@ -54,9 +54,9 @@ node scripts\instagram-poster.js    # Só Instagram
 node scripts\postar-agendado.js
 ```
 
-### Interface web
+### Painel web (Reel Machine Studio)
 ```bash
-node scripts\serve-studio.js
+npm run dev
 # Abra http://localhost:3939
 ```
 

@@ -174,3 +174,12 @@ temp/
 *.tmp
 *.swp
 *~
+
+# ========================================
+# Framework SINAPSE embarcado (NAO e codigo do app Reel Machine)
+# Fica no disco para uso local, mas fora do versionamento deste repo:
+# sao ~3700 arquivos de framework que inflavam clone/CI/review.
+# ========================================
+/squads/
+/.sinapse-ai/
+/.opencode/

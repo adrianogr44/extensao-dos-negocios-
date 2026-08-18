@@ -109,12 +109,32 @@ function loadQueue() {
     saveQueue(queue);
     return queue;
   }
-  const raw = fs.readFileSync(QUEUE_FILE, 'utf-8').replace(/^\uFEFF/, '');
-  return JSON.parse(raw);
+  try {
+    const raw = fs.readFileSync(QUEUE_FILE, 'utf-8').replace(/^\uFEFF/, '');
+    return JSON.parse(raw);
+  } catch (err) {
+    // Fila ilegivel (JSON truncado por crash no meio de um write): tenta o backup.
+    console.error(`[fila] ${QUEUE_FILE} corrompido (${err.message}). Tentando .bak...`);
+    try {
+      const bak = fs.readFileSync(QUEUE_FILE + '.bak', 'utf-8').replace(/^\uFEFF/, '');
+      const queue = JSON.parse(bak);
+      saveQueue(queue);
+      console.error('[fila] Restaurada a partir de .bak.');
+      return queue;
+    } catch {
+      throw new Error(`Fila corrompida e sem backup valido: ${QUEUE_FILE}. Corrija manualmente.`);
+    }
+  }
 }
 
 function saveQueue(queue) {
-  fs.writeFileSync(QUEUE_FILE, JSON.stringify(queue, null, 2));
+  // Escrita atomica: grava em .tmp e renomeia (rename e atomico no mesmo volume) e
+  // guarda a versao anterior em .bak. Se o processo morrer no meio, o JSON original
+  // continua intacto em vez de ficar truncado.
+  const tmp = QUEUE_FILE + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(queue, null, 2));
+  try { if (fs.existsSync(QUEUE_FILE)) fs.copyFileSync(QUEUE_FILE, QUEUE_FILE + '.bak'); } catch {}
+  fs.renameSync(tmp, QUEUE_FILE);
 }
 
 function getNextVideos(queue) {
@@ -719,21 +739,26 @@ async function postToFacebookOnPage(page, videoPath, video) {
     throw new Error('Facebook: botao Postar nao encontrado. Video NAO postado.');
   }
 
-  console.log('  [Facebook] Aguardando publicacao (30s)...');
-  await page.waitForTimeout(30000);
+  console.log('  [Facebook] Aguardando confirmacao da publicacao...');
+  let publicado = false;
+  for (let tentativa = 0; tentativa < 7 && !publicado; tentativa++) {
+    await page.waitForTimeout(5000);
+    publicado = await page.evaluate(() => {
+      const txt = document.body.innerText || '';
+      return txt.includes('Criar reel') || txt.includes('Create reel')
+        || txt.includes('Publicado com sucesso') || txt.includes('Published');
+    }).catch(() => false);
+  }
 
-  const dialogFechado = await page.evaluate(() => {
-    const txt = document.body.innerText;
-    return txt.includes('Criar reel') || txt.includes('Publicado com sucesso');
-  }).catch(() => false);
-
-  if (!dialogFechado) {
-    console.log('  [Facebook] Aviso: nao foi possivel confirmar o dialogo fechado');
+  if (!publicado) {
+    // Sem confirmacao NAO marca como postado: evita inflar o contador diario com um
+    // reel que nunca saiu. O loop trata o throw e mantem o video como pendente.
+    throw new Error('Facebook: publicacao nao confirmada (~35s sem o dialogo fechar). Video NAO marcado como postado.');
   }
 
   try { await page.goto(origUrl, { waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => {}); } catch {}
 
-  console.log('  [Facebook] Reel postado com sucesso!');
+  console.log('  [Facebook] Reel postado e confirmado!');
   return true;
 }
 
@@ -828,9 +853,23 @@ async function postToShorts(page, videoPath, video) {
     throw new Error('Botao Publicar nao encontrado');
   }
 
-  console.log('  [Shorts] Publicar clicado!');
-  await page.waitForTimeout(30000);
-  console.log('  [Shorts] Video publicado com sucesso!');
+  console.log('  [Shorts] Publicar clicado! Aguardando confirmacao...');
+  let publicadoSh = false;
+  for (let tentativa = 0; tentativa < 7 && !publicadoSh; tentativa++) {
+    await page.waitForTimeout(5000);
+    // Sucesso = o dialog de edicao fechou (botao Publicar sumiu) ou surgiu o link do short.
+    const doneVisivel = await page.locator('#done-button, ytcp-button#done-button')
+      .first().isVisible({ timeout: 1000 }).catch(() => false);
+    const temLink = await page.locator('a[href*="/shorts/"], a[href*="youtu.be/"]')
+      .first().isVisible({ timeout: 1000 }).catch(() => false);
+    publicadoSh = temLink || !doneVisivel;
+  }
+
+  if (!publicadoSh) {
+    throw new Error('Shorts: publicacao nao confirmada (~35s, dialog ainda aberto). Video NAO marcado como postado.');
+  }
+
+  console.log('  [Shorts] Video publicado e confirmado!');
   return true;
 }
 
@@ -930,7 +969,9 @@ async function main(maxVideos) {
       fs.closeSync(fd);
       return true;
     } catch (err) {
-      if (err.code !== 'EEXIST') return true;
+      // Fail-closed: qualquer erro que nao seja "lock ja existe" (EPERM, ENOENT...)
+      // NAO deve conceder o lock, senao duas rodadas rodam juntas no mesmo Chrome.
+      if (err.code !== 'EEXIST') return false;
       const lockAge = Date.now() - fs.statSync(LOCK_FILE).mtimeMs;
       let stalePid = false;
       try {
@@ -953,14 +994,16 @@ async function main(maxVideos) {
     }
   }
 
-  process.on('exit', removeLock);
-  process.on('SIGINT', () => { removeLock(); process.exit(0); });
-  process.on('SIGTERM', () => { removeLock(); process.exit(0); });
-
   if (!tryAcquireLock()) {
     console.log('Ja existe uma execucao em andamento (lock), pulando.');
     return;
   }
+
+  // Handlers de limpeza registrados SO depois de adquirir o lock: um processo que
+  // desistiu (lock ocupado por outra rodada) nunca pode apagar o lock alheio ao sair.
+  process.on('exit', removeLock);
+  process.on('SIGINT', () => { removeLock(); process.exit(0); });
+  process.on('SIGTERM', () => { removeLock(); process.exit(0); });
 
   const queue = loadQueue();
   if (queue.dailyCountShorts === undefined) queue.dailyCountShorts = 0;
@@ -1070,6 +1113,8 @@ const toPost = [];
         await igPage.close();
         results.instagram = true;
         legendasDb.marcarUso(video.filename, PROFILE, 'instagram');
+        queue.lastPostDate = today;
+        saveQueue(queue); // persiste ja: se cair depois, o IG nao volta como pendente
       } catch (err) {
         console.error(`  [Instagram] ERRO: ${err.message}`);
         video.error = video.error ? `${video.error} | Instagram: ${err.message}` : `Instagram: ${err.message}`;
@@ -1090,6 +1135,8 @@ const toPost = [];
         queue.dailyCountTikTok++;
         results.tiktok = true;
         legendasDb.marcarUso(video.filename, PROFILE, 'tiktok');
+        queue.lastPostDate = today;
+        saveQueue(queue); // persiste ja: se cair depois, o TikTok nao volta como pendente
       } catch (err) {
         console.error(`  [TikTok] ERRO: ${err.message}`);
         video.error = video.error ? `${video.error} | TikTok: ${err.message}` : `TikTok: ${err.message}`;
@@ -1127,6 +1174,8 @@ const toPost = [];
         queue.dailyCountFacebook++;
         results.facebook = true;
         legendasDb.marcarUso(video.filename, PROFILE, 'facebook');
+        queue.lastPostDate = today;
+        saveQueue(queue); // persiste ja: se cair depois, o Facebook nao volta como pendente
       } catch (err) {
         console.error(`  [Facebook] ERRO: ${err.message}`);
         video.error = video.error ? `${video.error} | Facebook: ${err.message}` : `Facebook: ${err.message}`;
@@ -1149,6 +1198,8 @@ const toPost = [];
         await shortsPage.close();
         results.shorts = true;
         legendasDb.marcarUso(video.filename, PROFILE, 'shorts');
+        queue.lastPostDate = today;
+        saveQueue(queue); // persiste ja: se cair depois, o Shorts nao volta como pendente
       } catch (err) {
         console.error(`  [Shorts] ERRO: ${err.message}`);
         video.error = video.error ? `${video.error} | Shorts: ${err.message}` : `Shorts: ${err.message}`;

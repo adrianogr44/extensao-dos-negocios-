@@ -57,7 +57,16 @@ function launchChromeIfNeeded() {
   } catch {}
 }
 
+let rodando = false;
+
 async function executarPostagem() {
+  // Guarda de sobreposicao: se um horario dispara enquanto a rodada anterior ainda
+  // roda (postagem demorou mais que o intervalo), pula em vez de rodar em paralelo.
+  if (rodando) {
+    log('Rodada anterior ainda em andamento — pulando este horario.');
+    return;
+  }
+  rodando = true;
   launchChromeIfNeeded();
   await new Promise(r => setTimeout(r, 5000));
   log(`Iniciando postagem (${VIDEOS_PER_RUN} videos)...`);
@@ -73,6 +82,8 @@ async function executarPostagem() {
   } catch (err) {
     clearTimeout(watchdog);
     log(`ERRO: ${err.message}`);
+  } finally {
+    rodando = false;
   }
 }
 
