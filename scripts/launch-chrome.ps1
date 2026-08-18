@@ -26,4 +26,4 @@ Write-Host "Use este navegador normalmente (ja esta logado nas suas contas)."
 Write-Host "NAO feche esta janela - o script de postagem precisa dela."
 Write-Host ""
 
-Start-Process -FilePath $chromePath -ArgumentList "--remote-debugging-port=9222", "--remote-allow-origins=*", "--user-data-dir=`"$env:USERPROFILE\chrome-debug-profile`"", "--no-first-run"
+Start-Process -FilePath $chromePath -ArgumentList "--remote-debugging-port=9222", "--remote-allow-origins=http://127.0.0.1", "--user-data-dir=`"$env:USERPROFILE\chrome-debug-profile`"", "--no-first-run"

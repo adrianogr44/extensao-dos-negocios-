@@ -36,7 +36,8 @@ export async function POST(req: NextRequest) {
   }
 
   const buffer = Buffer.from(await file.arrayBuffer())
-  const filename = `${Date.now()}-${file.name}`
+  // path.basename evita que file.name traga "../" e escreva fora de VIDEOS_DIR
+  const filename = `${Date.now()}-${path.basename(file.name)}`
   const filepath = path.join(VIDEOS_DIR, filename)
 
   await fs.writeFile(filepath, buffer)
@@ -60,7 +61,13 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: 'filename é obrigatório' }, { status: 400 })
   }
 
-  const filepath = path.join(VIDEOS_DIR, filename)
+  // Rejeita path traversal: aceita apenas um nome de arquivo simples, sem separadores.
+  const safe = path.basename(filename)
+  if (!safe || safe !== filename) {
+    return NextResponse.json({ error: 'filename inválido' }, { status: 400 })
+  }
+
+  const filepath = path.join(VIDEOS_DIR, safe)
   await fs.unlink(filepath).catch(() => {})
 
   return NextResponse.json({ success: true })

@@ -20,4 +20,4 @@ echo Use este navegador para fazer login nas contas MOTIVACAO.
 echo NAO feche esta janela - o script de postagem MOTIVACAO precisa dela.
 echo.
 
-start "" "C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9223 --remote-allow-origins=* --user-data-dir="%USERPROFILE%\chrome-debug-profile-motivacao" --no-first-run
+start "" "C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9223 --remote-allow-origins=http://127.0.0.1 --user-data-dir="%USERPROFILE%\chrome-debug-profile-motivacao" --no-first-run

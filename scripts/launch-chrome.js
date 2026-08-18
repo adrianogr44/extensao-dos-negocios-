@@ -79,7 +79,7 @@ $procs | Where-Object {
 
   const args = [
     `--remote-debugging-port=${PORT}`,
-    '--remote-allow-origins=*',
+    '--remote-allow-origins=http://127.0.0.1',
     `--user-data-dir=${PROFILE_DIR}`,
     '--no-first-run',
   ];

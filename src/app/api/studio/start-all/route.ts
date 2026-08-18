@@ -97,7 +97,7 @@ function launchChrome(envId: string) {
   const profilePath = path.join(process.env.USERPROFILE || 'C:\\Users\\adria', chromeProfile)
   const args = [
     `--remote-debugging-port=${env.port}`,
-    '--remote-allow-origins=*',
+    '--remote-allow-origins=http://127.0.0.1',
     `--user-data-dir=${profilePath}`,
     '--no-first-run',
   ]

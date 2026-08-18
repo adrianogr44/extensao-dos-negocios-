@@ -89,7 +89,7 @@ export function launchChrome(envId: string, mode?: ChromeMode) {
   )
   const args = [
     `--remote-debugging-port=${env?.port ?? (envId === 'motivacao' ? 9223 : 9222)}`,
-    '--remote-allow-origins=*',
+    '--remote-allow-origins=http://127.0.0.1',
     `--user-data-dir=${profilePath}`,
     '--no-first-run',
   ]

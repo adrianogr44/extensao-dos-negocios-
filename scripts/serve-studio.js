@@ -468,7 +468,10 @@ const server = http.createServer((req, res) => {
   if (pathname === '/api/video' && req.method === 'GET') {
     const filename = url.searchParams.get('file');
     if (!filename) return sendJson(res, { error: 'file param required' }, 400);
-    const videoPath = path.join(REELS_VIDEO_DIR, filename);
+    // Rejeita path traversal: so um nome simples, dentro de REELS_VIDEO_DIR.
+    const safe = path.basename(filename);
+    if (safe !== filename) return sendJson(res, { error: 'invalid file' }, 400);
+    const videoPath = path.join(REELS_VIDEO_DIR, safe);
     if (!fs.existsSync(videoPath)) return sendJson(res, { error: 'not found' }, 404);
 
     const stat = fs.statSync(videoPath);
